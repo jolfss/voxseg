@@ -1,43 +1,47 @@
 import omni.ext
 import omni.ui as ui
 
-
-# Functions and vars are available to other extension as usual in python: `example.python_ext.some_public_function(x)`
-def some_public_function(x: int):
-    print(f"[omni.vseg] some_public_function was called with {x}")
-    return x ** x
+#--------------------------#
+#   user event functions   #
+#--------------------------#
 
 
-# Any class derived from `omni.ext.IExt` in top level module (defined in `python.modules` of `extension.toml`) will be
-# instantiated when extension gets enabled and `on_startup(ext_id)` will be called. Later when extension gets disabled
-# on_shutdown() is called.
+def segment_fn():
+    print("[segment_fn] procedure started")
+
+def cleanup_fn():
+    print("[cleanu_fn] procedure started")
+
+
+#--------------------------#
+#   main extension class   #
+#--------------------------#
+
 class MyExtension(omni.ext.IExt):
-    # ext_id is current extension id. It can be used with extension manager to query additional information, like where
-    # this extension is located on filesystem.
+
+    class_labels : list = []
+
     def on_startup(self, ext_id):
-        print("[omni.vseg] MyExtension startup")
+        print("[omni.vseg] VSeg on_startup")
 
-        self._count = 0
-
-        self._window = ui.Window("My Window", width=300, height=300)
+        self._window = ui.Window("VSeg", width=300, height=500)
         with self._window.frame:
             with ui.VStack():
-                label = ui.Label("")
-                
-
-                def on_click():
-                    self._count += 1
-                    label.text = f"count: {self._count}"
-
-                def on_reset():
-                    self._count = 0
-                    label.text = "empty"
-
-                on_reset()
 
                 with ui.HStack():
-                    ui.Button("Add", clicked_fn=on_click)
-                    ui.Button("Reset", clicked_fn=on_reset)
+                    self.field_class_label = ui.StringField()
+
+                    # Class labels
+                    with ui.VStack():
+                        self.button_clear_labels = ui.Button("Clear Labels")
+                        self.labels_current_classes = ui.Label("Current Classes")
+                
+                # Display
+                with ui.HStack():
+                    self.button_segment = ui.Button("Compute Segments")
+                    self.button_cleanup = ui.Button("Clear Segments")
+                    self.button_toggle_prims = ui.Button("Show/Hide Voxels")
+                    
 
     def on_shutdown(self):
-        print("[omni.vseg] MyExtension shutdown")
+        print("[omni.vseg] VSeg on_shutdown")
