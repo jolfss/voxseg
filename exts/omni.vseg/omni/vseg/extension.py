@@ -24,23 +24,19 @@ class MyExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
         print("[omni.vseg] VSeg on_startup")
 
-        self._window = ui.Window("VSeg", width=300, height=500)
+        self._window = ui.Window("VSeg", width=450, height=700)
         with self._window.frame:
             with ui.VStack():
 
+                self.button_clear_labels = ui.Button("Clear Labels")
+
                 with ui.HStack():
                     self.field_class_label = ui.StringField()
+                    self.button_add_new_label = ui.Button("+")
 
-                    # Class labels
-                    with ui.VStack():
-                        self.button_clear_labels = ui.Button("Clear Labels")
-                        self.labels_current_classes = ui.Label("Current Classes")
-                
-                # Display
-                with ui.HStack():
-                    self.button_segment = ui.Button("Compute Segments")
-                    self.button_cleanup = ui.Button("Clear Segments")
-                    self.button_toggle_prims = ui.Button("Show/Hide Voxels")
+                self.button_segment = ui.Button("Compute Segments")
+                self.button_cleanup = ui.Button("Clear Segments")
+                self.button_toggle_prims = ui.Button("Show/Hide Voxels")
                     
 
     def on_shutdown(self):
