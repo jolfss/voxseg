@@ -3,8 +3,8 @@
 version = "1.0.0"
 
 # The title and description fields are primarily for displaying extension info in UI
-title = "Simple UI Extension Template"
-description = "The simplest python extension example. Use it as a starting point for your extensions."
+title = "Voxel Semantic Segmentation (VoxSeg)"
+description = "TODO DESCRIPTION."
 
 # Path (relative to the root) or content of readme markdown file for UI.
 readme  = "docs/README.md"
@@ -13,7 +13,7 @@ readme  = "docs/README.md"
 changelog = "docs/CHANGELOG.md"
 
 # URL of the extension source repository.
-repository = "https://github.com/NVIDIA-Omniverse/kit-extension-template"
+repository = "https://github.com/jolfss/voxseg"
 
 # One of categories for UI.
 category = "Example"
@@ -26,7 +26,6 @@ icon = "data/icon.png"
 
 # Preview to show in the extension manager
 preview_image = "data/preview.png"
-
 
 # Use omni.ui to build simple UI
 [dependencies]
