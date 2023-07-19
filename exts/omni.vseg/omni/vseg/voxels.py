@@ -54,9 +54,10 @@ class Voxels():
 
     def get_voxel_index(self, voxel_index_ijk : Tuple[int,int,int]) -> Tuple[int,int,int]:
         """The index to find the i,j,k-th voxel at.
-
-        Requires:
-            i,j,k \in [-1...G] inclusive (per dimension of G)"""
+        
+        Note:
+            indices[0...G-1] represents the main storage area
+            indices[-1,G] represent the buffer"""
         i,j,k = voxel_index_ijk
         return (i+1,j+1,k+1)
     

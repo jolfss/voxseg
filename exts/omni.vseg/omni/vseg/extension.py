@@ -3,85 +3,113 @@ import omni.ui as ui
 
 from .voxels import Voxels
 
-# Class Label Management System
-EMPTY_CLASS_LABELS_PLACEHOLDER = "--empty"
-
-def clear_labels_fn(class_labels : set, display_label : ui.Label):
-    """Empties [class_labels] and sets [display_label] to [EMPTY_CLASS_LABELS_PLACEHOLDER]."""
-    class_labels.clear()
-    display_label.text = EMPTY_CLASS_LABELS_PLACEHOLDER
-
-def add_new_class_label_fn(class_labels : set, input_field : ui.StringField, display_label : ui.Label):
-    """Adds or removes a class label from [class-labels], taking the label from [input_field]
-    and writing all current labels to [display_label] or the [EMPTY_CLASS_LABELS_PLACEHOLDER] if no labels"""
-    user_input = input_field.model.as_string.strip()
-
-    if len(user_input) < 1: # Labels are only useful if there is at least one valid letter.
-        return 
-    
-    if user_input[0] == '-': # Delete class label
-        user_input = user_input[1:]
-        if user_input in class_labels:
-            class_labels.remove(user_input)
-    elif not user_input in class_labels: # Add class label
-        class_labels.add(user_input)
-    
-    if len(class_labels) == 0: 
-        display_label.text = EMPTY_CLASS_LABELS_PLACEHOLDER
-        return
-
-    label_text = ""
-    list(class_labels).sort()
-    for class_label in class_labels:
-        label_text = F"{label_text}\t\t\t{class_label}"
-
-    display_label.text = label_text
-
-# Segmentation System
-def compute_segment_fn(voxels : Voxels):
-    print("Attempting to spawn voxel.")
-    for i in range(voxels.G[0]):
-        print(F"{round((100*i)/voxels.G[0].item())}%")
-        for j in range(voxels.G[1]):
-            for k in range(voxels.G[2]):
-                voxels.create_voxel_prim((i,j,k))
-
-def cleanup_fn(vstack : ui.VStack):
-    vstack.add_child(ui.Button("Label"))
-
-def toggle_prims_fn():
-    pass
+from .build_extension import *
 
 # NOTE: Adding elements to a Container must be done by a method *OUTSIDE* the container. 
+PAD = 10
+TEXT_PAD = ' '*int(PAD/5)
 
 class MyExtension(omni.ext.IExt):
-    """The extension object for VSeg."""
+    """The extension object for VoxSeg."""
+    voxels : Voxels
+    class_labels:dict = {} # TODO: If it turns out grouping labels is important, make this a dictionary that maps key (class label) --> value (grouped labels)
 
-    class_labels            : set = set()       # contains all of the class labels registered
-    class_label_input_field : ui.StringField    # user input field for adding/removing class labels
-    class_labels_label      : ui.Label          # shows the labels the user has currently registered
+    # Dynamic ui elements
+    classes_string_field : ui.StringField
+    classes_vstack : ui.VStack
 
-    voxels : Voxels # container
+    def build_extension(self) -> ui.Window:
+        """Builds the ui elements of the Voxseg Extension."""
+        window = ui.Window("Voxseg", width=450, height=700, padding_x=PAD, padding_y=PAD)
+        with window.frame:
+            with ui.ScrollingFrame():
+                with ui.VStack(height=0.0,spacing=PAD):
+                    self.build_class_label_editor()
+                    self.build_class_labels_vstack()
+                    self.build_voxseg_tools()
+                    self.build_visualization_tools()
+        return window
+
+    def build_class_label_editor(self):
+        """Creates the first widget group meant for defining class labels.
+        Defines:
+            self.class_label_string_field (ui.StringField):
+            self.class_label_color_widget (ui.ColorWidget):
+        Requires:
+            self.class_labels_vstack (ui.VStack): The VStack which will contain all of the class labels."""
+        def add_label_fn():
+            user_input = self.class_label_string_field.model.as_string.strip()
+            color_model  = self.class_label_color_widget.model
+            color_list=[(color_model.get_item_value_model(child)).as_float for child in color_model.get_item_children()[:3]]
+            color = ui.color(color_list[0],color_list[1],color_list[2])
+            if not user_input in self.class_labels.keys():
+                self.class_labels.update({user_input:color}) # TODO: Determine type of sublabels.
+                self.update_class_labels_vstack()
+
+        with ui.CollapsableFrame("Class Labels"):
+            with ui.VStack(height=0):
+                ui.Button("add label", clicked_fn=add_label_fn)
+                with ui.HStack():
+                    self.class_label_string_field = ui.StringField()
+                    self.class_label_color_widget = ui.ColorWidget()
+
+    def build_class_labels_vstack(self):
+        """Creates the widget which will contain all of the defined class labels and a button to clear them.
+        Defines:
+            class_labels_vstack (ui.VStack): """
+        def clear_labels_fn():
+            self.class_labels.clear()
+            self.update_class_labels_vstack()
+
+        with ui.CollapsableFrame("View Labels"):
+            self.class_labels_vstack = ui.VStack(height=0, spacing=PAD)
+        ui.Button("Clear Labels", clicked_fn=clear_labels_fn)
+
+    def update_class_labels_vstack(self):
+        """Empties the current vstack of all class labels and rebuilds them from [self.class_labels]
+        Requires:
+            self.class_labels_vstack (ui.VStack)"""
+        print("Update called")
+        self.class_labels_vstack.clear()
+        with self.class_labels_vstack:
+            for class_label in self.class_labels.keys():
+                ui.Label(class_label, word_wrap=True, style={"color":self.class_labels[class_label]})
+
+    def build_voxseg_tools(self):
+        """Creates the widget which will contain all of the defined class labels.
+        Defines:
+            class_labels_vstack (ui.VStack): """
+        with ui.CollapsableFrame("Voxseg Parameters"):
+            with ui.VStack(height=0,spacing=PAD):
+                with ui.HStack():
+                    ui.Label(F"{TEXT_PAD}World Origin{TEXT_PAD}",width=ui.Fraction(1))
+                    ui.MultiFloatDragField(0.0,0.0,0.0,width=ui.Fraction(3))
+                with ui.HStack():
+                    ui.Label(F"{TEXT_PAD}World Dims{TEXT_PAD}",width=ui.Fraction(1))
+                    ui.MultiFloatDragField(1.0,1.0,1.0,min=1.0,step=0.1,width=ui.Fraction(3))
+                with ui.HStack():
+                    ui.Label(F"{TEXT_PAD}Grid Dims{TEXT_PAD}",width=ui.Fraction(1))
+                    ui.MultiIntDragField(2,2,2,min=2,width=ui.Fraction(3))
+                    
+    def build_visualization_tools(self):
+        """TODO: Docs"""
+        with ui.CollapsableFrame("Voxel Visualization"):
+            with ui.VStack(height=0,spacing=PAD):
+                with ui.VStack():
+                    ui.Label(F"{TEXT_PAD}Total Occupied Voxels: <UNIMPLEMENTED>")
+                    ui.Label(F"{TEXT_PAD}Number of Photos: <UNIMPLEMENTED>")
+                ui.Button("visualize occupancy")
+                ui.Button("segment over labels")
+                ui.Button("clear segments")
+                ui.Button("hide/show voxels")
+
 
     def on_startup(self, ext_id):
-        print("[omni.vseg] VSeg on_startup")
+
+        print("[omni.voxseg] VoxSeg on_startup")
         self.voxels = Voxels((10,10,10),(20,20,20))
 
-        self._window = ui.Window("VSeg", width=450, height=700)
-        with self._window.frame:
-            with ui.VStack():
-                with ui.VStack():
-                    self.stacky = ui.VStack()
-                    with self.stacky: 
-                        self.class_label_input_field = ui.StringField()
-                        ui.Button("Add new class label (or remove with -LABEL)", clicked_fn=lambda : add_new_class_label_fn(self.class_labels, self.class_label_input_field, self.class_labels_label))
-                    self.class_labels_label = ui.Label(EMPTY_CLASS_LABELS_PLACEHOLDER, alignment=ui.Alignment.CENTER, word_wrap=True)
-                    ui.Button("Clear Labels", clicked_fn=lambda : clear_labels_fn(self.class_labels, self.class_labels_label))
-                ui.Button("Compute Segments", clicked_fn=lambda : compute_segment_fn(self.voxels))
-                ui.Button("Clear Segments", clicked_fn=lambda : cleanup_fn(self.stacky)) 
-                ui.Button("Show/Hide Voxels", clicked_fn=toggle_prims_fn)
-                
-                # No other ui elements can occur backdented from here.
+        self.window = self.build_extension()            
 
     def on_shutdown(self):
-        print("[omni.vseg] VSeg on_shutdown")
+        print("[omni.voxseg] VoxSeg on_shutdown")
