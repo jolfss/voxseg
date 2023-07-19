@@ -3,8 +3,6 @@ import omni.ui as ui
 
 from .voxels import Voxels
 
-from .build_extension import *
-
 # NOTE: Adding elements to a Container must be done by a method *OUTSIDE* the container. 
 PAD = 10
 TEXT_PAD = ' '*int(PAD/5)
