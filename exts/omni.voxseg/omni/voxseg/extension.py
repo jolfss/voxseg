@@ -79,7 +79,7 @@ class MyExtension(omni.ext.IExt):
             
             self.update_class_vstack()
 
-        def create_new_sublabel(required_for_end_edit):
+        def create_new_sublabel():
             """Adds a new label for segmentation to the current color (class)."""
             (r,g,b), label = get_current_color_and_label()
 
@@ -169,10 +169,17 @@ class MyExtension(omni.ext.IExt):
         GXEP, GYEP = GXE.permute(2,1,0), GYE.permute(0,2,1)
         all_voxels = torch.stack((GXEP,GYEP,GZE),dim=3).view(-1,3)
         self.voxels.create_voxel_prims(all_voxels)
+    
+    def __debug_create_all_voxels_with_instancer(self):
+        gx,gy,gz = self.voxels.grid_dims
+        GX, GY, GZ = torch.arange(gx),torch.arange(gy),torch.arange(gz)
+        GXE, GYE, GZE = GX.expand(gz,gy,-1), GY.expand(gx,gz,-1), GZ.expand(gx,gy,-1)
+        GXEP, GYEP = GXE.permute(2,1,0), GYE.permute(0,2,1)
+        all_voxels = torch.stack((GXEP,GYEP,GZE),dim=3).view(-1,3)
+        self.voxels.create_voxel_prims_with_instancer(all_voxels)
 
     def visualize_occupancy_fn(self):
-        
-
+        pass
 
     def build_visualization_tools(self):
         """TODO: Docs"""
@@ -181,7 +188,7 @@ class MyExtension(omni.ext.IExt):
                 with ui.VStack():
                     ui.Label(F"{TEXT_PAD}Total Occupied Voxels: <UNIMPLEMENTED>")
                     ui.Label(F"{TEXT_PAD}Number of Photos: <UNIMPLEMENTED>")
-                ui.Button("visualize occupancy", clicked_fn=self.visualize_occupancy_fn) #TODO:
+                ui.Button("visualize occupancy", clicked_fn=self.__debug_create_all_voxels_with_instancer)
                 ui.Button("segment over labels")
                 ui.Button("clear segments")
                 ui.Button("hide/show voxels")
@@ -189,7 +196,7 @@ class MyExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
 
         print("[omni.voxseg] VoxSeg on_startup")
-        self.voxels = Voxels((10,10,10),(20,20,20))
+        self.voxels = Voxels((10,10,10),(50,50,50))
 
         self.window = self.build_extension()            
 
