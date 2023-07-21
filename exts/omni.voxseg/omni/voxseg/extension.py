@@ -160,16 +160,6 @@ class MyExtension(omni.ext.IExt):
     #   voxseg-visualization widgets  #
     #---------------------------------#
 
-    def __debug_create_all_voxels(self):
-        # self.voxels.create_voxel_prims(
-        #     torch.arange(min(self.voxels.grid_dims)).expand(3,min(self.voxels.grid_dims)).T.clone())
-        gx,gy,gz = self.voxels.grid_dims
-        GX, GY, GZ = torch.arange(gx),torch.arange(gy),torch.arange(gz)
-        GXE, GYE, GZE = GX.expand(gz,gy,-1), GY.expand(gx,gz,-1), GZ.expand(gx,gy,-1)
-        GXEP, GYEP = GXE.permute(2,1,0), GYE.permute(0,2,1)
-        all_voxels = torch.stack((GXEP,GYEP,GZE),dim=3).view(-1,3)
-        self.voxels.create_voxel_prims(all_voxels)
-    
     def __debug_create_all_voxels_with_instancer(self):
         gx,gy,gz = self.voxels.grid_dims
         GX, GY, GZ = torch.arange(gx),torch.arange(gy),torch.arange(gz)
@@ -188,7 +178,8 @@ class MyExtension(omni.ext.IExt):
                 with ui.VStack():
                     ui.Label(F"{TEXT_PAD}Total Occupied Voxels: <UNIMPLEMENTED>")
                     ui.Label(F"{TEXT_PAD}Number of Photos: <UNIMPLEMENTED>")
-                ui.Button("visualize occupancy", clicked_fn=self.__debug_create_all_voxels_with_instancer)
+                ui.Button("--DEBUG spawn all", clicked_fn=self.__debug_create_all_voxels_with_instancer)
+                ui.Button("visualize occupancy")
                 ui.Button("segment over labels")
                 ui.Button("clear segments")
                 ui.Button("hide/show voxels")

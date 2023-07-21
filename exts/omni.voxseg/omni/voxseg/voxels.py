@@ -61,6 +61,8 @@ class Voxels():
         self.__voxel_prims   = {}
         self.num_voxels      = _G_[0]*_G_[1]*_G_[2]
 
+        # NOTE: Cannot call initiailze_voxel_instancer yet because the stage does not exist when the extension is loaded.
+
     def initialize_voxel_instancer(self, stage):
         """Creates the prototype voxel for the instancer."""
         """ 2---4                    5-------4      
@@ -92,15 +94,6 @@ class Voxels():
 
         self.voxel_instancer = UsdGeom.PointInstancer.Define(stage, voxel_instancer_prim_path)
 
-        # Perform David's Bizarre Incantation
-        points_W = torch.zeros((self.capacity(),3), device="cuda")
-        points_W = points_W.view(-1, 3)
-        self.voxel_instancer.GetPositionsAttr().Set(Vt.Vec3fArray.FromNumpy(points_W.cpu().numpy()))
-        self.voxel_instancer.GetProtoIndicesAttr().Set([0] * points_W.shape[0])
-        # End of Bizarre Incantation
-
-        self.voxel_instancer.CreateProtoIndicesAttr([0])
-
         proto_rel = self.voxel_instancer.GetPrototypesRel()
         proto_rel.AddTarget(proto_voxel_prim_path)
         
@@ -108,7 +101,7 @@ class Voxels():
     def capacity(self, include_buffer=False) -> int:
         "Number of total possible voxels in the voxel grid."
         roving_product = 1
-        for dim in (self._G_ if include_buffer else self.G):
+        for dim in (self.grid_dims if include_buffer else self._grid_dims_):
             roving_product *= dim
         return roving_product
     
@@ -130,8 +123,6 @@ class Voxels():
         
         self.initialize_voxel_instancer(omni.usd.get_context().get_stage())
 
-        print("Instancer check START")
-
         voxel_indices += 1
  
         voxel_centers = Vt.Vec3fArray.FromNumpy(self.get_voxel_centers(voxel_indices).cpu().numpy())
@@ -139,10 +130,7 @@ class Voxels():
         self.voxel_instancer.CreatePositionsAttr(voxel_centers)
 
         num_instances = len(voxel_indices)
-        self.voxel_instancer.GetProtoIndicesAttr().Set([0] * num_instances)
-
-        print("Instancer check COMPLETE")
-  
+        self.voxel_instancer.GetProtoIndicesAttr().Set([0] * num_instances)  
         
     def receive_voxel_counts(self, tensor_ijk_count : Tensor):
         """Updates/populates [self.__voxel_counts] to have the count numbers for each voxel_ijk in [tensor_ijk_count].
@@ -253,6 +241,20 @@ class Voxels():
     #                                       7,6,4,  7,4,5,  7,0,1,  7,1,6,  1,4,6,  1,2,4,])     
                                           
     #     return voxel_prim_path
+
+    def TODO__set_visibility(self, visible: bool):
+        """Sets the visibility of the markers.
+
+        The method does this through the USD API.
+
+        Args:
+            visible (bool): flag to set the visibility.
+        """
+        imageable = UsdGeom.Imageable(self._instancer_manager)
+        if visible:
+            imageable.MakeVisible()
+        else:
+            imageable.MakeInvisible()
 
 def apply_color_to_prim(color: tuple) -> Callable[[str],None]:
     """Apply an RGB color to a prim. 
