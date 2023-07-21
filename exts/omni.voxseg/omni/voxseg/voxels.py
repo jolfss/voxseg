@@ -136,8 +136,8 @@ class Voxels:
        
         # Create a new cube prim
         prim_name = F"voxel_{int(255*color[0])}_{int(255*color[1])}_{int(255*color[2])}" # TODO: Maybe take in a custom name.
-        primpath = F"{self.voxel_prim_directory}/prototypes/voxel_{prim_name}"
-        cube = UsdGeom.Cube.Define(stage, primpath)
+        prim_path = F"{self.voxel_prim_directory}/prototypes/voxel_{prim_name}"
+        cube = UsdGeom.Cube.Define(stage, prim_path)
 
         # Scale to the correct voxel dimensions
         sx, sy, sz = (self.W/(2*self.G))
@@ -146,13 +146,15 @@ class Voxels:
         # Set color
         cube.GetDisplayColorAttr().Set([(Gf.Vec3f(*color))])
 
+        # TODO: Material/Opacity
+
         # Add new prototype to the prototype relations (PrototypesRel)
-        self.voxel_instancer.GetPrototypesRel().AddTarget(primpath)
+        self.voxel_instancer.GetPrototypesRel().AddTarget(prim_path)
 
         # Update backend
         new_index = len(self.color_to_protoindex.keys())
         self.color_to_protoindex.update({color : new_index})
-        self.voxel_prototypes.append(primpath)
+        self.voxel_prototypes.append(prim_path)
 
         # TODO: Figure out how to hide the prototype but not the instances. Some voxels we do want invisible though, this does that.
         if invisible:

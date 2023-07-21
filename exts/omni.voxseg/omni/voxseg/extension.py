@@ -7,17 +7,35 @@ import omni.ext
 import omni.ui as ui
 from omni.ui import AbstractValueModel, AbstractItemModel
 
+import time
+
 from .voxels import Voxels
 
 # NOTE: Adding elements to a Container must be done by a method *OUTSIDE* the container. 
+
 PAD = 10
 TEXT_PAD = ' '*int(PAD/5)
+
+GRID_DIM = (100,100,100)
+
 
 class MyExtension(omni.ext.IExt):
     """The extension object for VoxSeg."""
 
     voxels : Voxels
     "The container object for voxel data."
+
+    def on_startup(self, ext_id):
+        """TODO: Describe the order of initialization sensitivities. (what depends on what)"""
+        print("[omni.voxseg] VoxSeg on_startup")
+        self.voxels = Voxels((10,10,10),GRID_DIM)
+
+        self.window = self.build_extension()                   
+
+    def on_shutdown(self):
+        """TODO: """
+        print("[omni.voxseg] VoxSeg on_shutdown")
+
 
     def build_extension(self) -> ui.Window:
         """Builds the ui elements of the Voxseg Extension."""
@@ -31,31 +49,42 @@ class MyExtension(omni.ext.IExt):
                     self.build_visualization_tools()
         return window
     
-    #-------------------------#
-    #   class labels widgets  #
-    #-------------------------#
-    """The fundamental idea is that each color represents a class, so instead of making structure which groups labels
-    under a particular class, simply group all labels by the color they were defined with."""
+    #-------------------------------------#
+    #   class label toolkit and backend   #
+    #-------------------------------------#
+    """
+    The fundamental idea is that each color represents a class, so instead of making structure which groups labels
+    under a particular class, simply group all labels by the color they were defined with.
+    """
 
-    default_class_label : str = "no label"
-    "TODO: The non-label."
+    default_class_label_list : str = ["no label"]
+    "TODO: The non-labels--no specific implementation decided upon yet."
 
     default_class_color : Tuple[float,float,float] = (0.5,0.5,0.5)
     "This color is reserved for the non-label, attempts to use it will fail."
 
-    dict_color_to_class_labels : dict = {default_class_color : default_class_label}
-    """Groups sublabels by their color, their de facto class. (r,g,b) (float * float * float) -> labels (str list)
-    NOTE: The key can be any valid argument to ui.color(), which has many overloads.
-    NOTE 2: The key MUST be (r,g,b) when interfacing with voxels.py though."""
+    dict_color_to_class_label_list : dict = {default_class_color : default_class_label_list}
+    "Groups sublabels by their color, their de facto class. (r,g,b) (float * float * float) -> labels (str list)"
 
-    dict_class_label_to_color : dict =  {default_class_label : default_class_color}
+    dict_class_label_to_color : dict = {}
     "label (str) -> r,g,b (float,float,float)"
 
+    def register_default_class(self):
+        """Registers the default class to the appropriate dictionaries. 
+        The default class corresponds to invisible (air) voxels."""
+
+        # Update the color to point to the labels, if any, which denote the default class.
+        self.dict_color_to_class_label_list = {self.default_class_color : self.default_class_label_list}
+
+        # Connect each label in the default labels to the default class color.
+        for default_label in self.default_class_label_list:
+            self.dict_class_label_to_color.update({default_label : self.default_class_color})
+    
     def get_class_colors(self) -> List[Tuple[float,float,float]]:
         """Returns all of the colors which correspond to existing classes.
         NOTE: The first element ought to be the 'default'/empty class."""
-        class_colors = list(self.dict_color_to_class_labels.keys())
-        assert self.dict_color_to_class_labels[class_colors[0]] == self.default_class_label
+        class_colors = list(self.dict_color_to_class_label_list.keys())
+        assert self.dict_color_to_class_label_list[class_colors[0]] == self.default_class_label
         return class_colors        
 
     def build_class_label_editor(self):
@@ -73,16 +102,16 @@ class MyExtension(omni.ext.IExt):
             (r,g,b), _ = get_current_color_and_label()      
 
             # make random colors until one is not in the current list of colors
-            while (r,g,b) in self.dict_color_to_class_labels.keys():
+            while (r,g,b) in self.dict_color_to_class_label_list.keys():
                 r,g,b = np.random.rand(3)
 
             # removes all colors with no sublabels, NOTE: Not the best way to do this but usually there are few colors
-            for color in list(self.dict_color_to_class_labels.keys()):
-                if len(self.dict_color_to_class_labels[color]) == 0:
-                    self.dict_color_to_class_labels.pop(color) 
+            for color in list(self.dict_color_to_class_label_list.keys()):
+                if len(self.dict_color_to_class_label_list[color]) == 0:
+                    self.dict_color_to_class_label_list.pop(color) 
 
             # create new color with no labels
-            self.dict_color_to_class_labels.update({(r,g,b):[]})
+            self.dict_color_to_class_label_list.update({(r,g,b):[]})
 
             # change the color-picker widget to match the generated color
             widget = self.class_color_widget.model
@@ -109,23 +138,23 @@ class MyExtension(omni.ext.IExt):
                 print(F"[voxseg] Warning: Label {label} is already reserved.")
                 return
 
-            if not (r,g,b) in self.dict_color_to_class_labels.keys(): # handle case where label is added before class
-                self.dict_color_to_class_labels.update({(r,g,b):[]})
+            if not (r,g,b) in self.dict_color_to_class_label_list.keys(): # handle case where label is added before class
+                self.dict_color_to_class_label_list.update({(r,g,b):[]})
             
             self.dict_class_label_to_color.update({label:(r,g,b)}) 
 
-            sublabels : list = self.dict_color_to_class_labels[(r,g,b)] 
+            sublabels : list = self.dict_color_to_class_label_list[(r,g,b)] 
             sublabels.append(label)
 
             self.update_class_vstack()
 
-        with ui.CollapsableFrame("Class Labels"):
+        with ui.CollapsableFrame("Class Label Editor"):
             STARTING_COLOR = 0.8,0.2,0.1
             with ui.VStack(height=0):
                 with ui.HStack():
                     ui.Button("Change Color (New Class)", clicked_fn=create_new_class)
                     self.class_color_widget = ui.ColorWidget(*STARTING_COLOR)
-                    ui.AbstractItemModel.add_end_edit_fn(self.class_color_widget.model, create_new_class)
+                    ui.AbstractItemModel.add_end_edit_fn(self.class_color_widget.model, lambda _, __ : create_new_class())
 
                 self.button_assign_new_sublabel = ui.Button("Assign New Sublabel", clicked_fn=create_new_sublabel)
                 self.class_label_string_field = ui.StringField()
@@ -138,12 +167,11 @@ class MyExtension(omni.ext.IExt):
 
         def clear_labels_fn():
             """Empties the current list of labels and colors (classes) and reloads their container."""
-            self.dict_color_to_class_labels.clear()
+            self.dict_color_to_class_label_list.clear()
             self.dict_class_label_to_color.clear()
 
-            # Keep persistent primordial label
-            self.dict_color_to_class_labels.update({self.default_class_color : [self.default_class_label]})
-            self.dict_class_label_to_color.update( {self.default_class_label : self.default_class_color})
+            # Ensure default label is added first.
+            self.register_default_class()
 
             self.update_class_vstack()
             
@@ -157,8 +185,8 @@ class MyExtension(omni.ext.IExt):
         """Clears and then rebuilds the vstack with all colors (classes) and their labels."""
         self.class_vstack.clear()
         with self.class_vstack:
-            for class_color in self.dict_color_to_class_labels.keys():
-                for class_label in self.dict_color_to_class_labels[class_color]:
+            for class_color in self.dict_color_to_class_label_list.keys():
+                for class_label in self.dict_color_to_class_label_list[class_color]:
                     ui.Label(class_label, style={"font_size": 40.0, "color":ui.color(*class_color)})
 
     #-------------------------#
@@ -184,20 +212,22 @@ class MyExtension(omni.ext.IExt):
     #   voxseg-visualization widgets  #
     #---------------------------------#
 
-    def __debug_create_all_voxels_with_instancer(self):
+    def __debug_randomize_over_current_labels(self):
         gx,gy,gz = self.voxels.grid_dims
         GX, GY, GZ = torch.arange(gx),torch.arange(gy),torch.arange(gz)
         GXE, GYE, GZE = GX.expand(gz,gy,-1), GY.expand(gx,gz,-1), GZ.expand(gx,gy,-1)
         GXEP, GYEP = GXE.permute(2,1,0), GYE.permute(0,2,1)
         all_voxel_indices = torch.stack((GXEP,GYEP,GZE),dim=3).view(-1,3)
 
-        class_colors = self.dict_color_to_class_labels.keys()
+        class_colors = self.dict_color_to_class_label_list.keys()
         for color in class_colors:
             self.voxels.register_new_voxel_color(color, invisible=color==self.default_class_color)
 
         random_colors = (torch.rand(len(all_voxel_indices)) * len(class_colors)).floor().int()
-
+        
+        A = time.time()
         self.voxels.display_voxels(all_voxel_indices, random_colors)
+        print(F"TOTAL TIME ELAPSED:{time.time() - A}")
 
     def visualize_occupancy_fn(self):
         pass
@@ -209,18 +239,9 @@ class MyExtension(omni.ext.IExt):
                 with ui.VStack():
                     ui.Label(F"{TEXT_PAD}Total Occupied Voxels: <UNIMPLEMENTED>")
                     ui.Label(F"{TEXT_PAD}Number of Photos: <UNIMPLEMENTED>")
-                ui.Button("--DEBUG spawn all", clicked_fn=self.__debug_create_all_voxels_with_instancer)
+                ui.Button("--DEBUG randomize over current labels", clicked_fn=self.__debug_randomize_over_current_labels)
                 ui.Button("visualize occupancy")
                 ui.Button("segment over labels")
                 ui.Button("clear segments")
                 ui.Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle_global_visibility())
 
-    def on_startup(self, ext_id):
-
-        print("[omni.voxseg] VoxSeg on_startup")
-        self.voxels = Voxels((10,10,10),(5,5,5))
-
-        self.window = self.build_extension()            
-
-    def on_shutdown(self):
-        print("[omni.voxseg] VoxSeg on_shutdown")
