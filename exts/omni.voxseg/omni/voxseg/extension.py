@@ -43,7 +43,6 @@ class MyExtension(omni.ext.IExt):
         """TODO: """
         print("[omni.voxseg] VoxSeg on_shutdown")
 
-
     def build_extension(self) -> Window:
         """Builds the ui elements of the Voxseg Extension."""
         window = Window("Voxseg", width=450, height=700, padding_x=PAD, padding_y=PAD)
@@ -65,7 +64,6 @@ class MyExtension(omni.ext.IExt):
     cannot be altered afterwards.
     """
 
-    # TODO: Set up editing.
     def build_domain_editor(self):
         """Creates the widget which will set voxseg parameters."""
         with CollapsableFrame("Voxseg Parameters"):
@@ -97,9 +95,11 @@ class MyExtension(omni.ext.IExt):
         grid_dims=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
 
         return tuple(voxel_center), tuple(world_dims), tuple(grid_dims)
-        
+
+    # TODO: Preview the domain bounds.
     def apply_preview_domain_callback(self, abstract_item_model : AbstractItemModel, abstract_item : AbstractItem):
         """Previews the voxel space."""
+        pass
 
     def apply_domain_end_edit_callbacks(self):
         """TODO: Docs"""
@@ -336,8 +336,8 @@ class MyExtension(omni.ext.IExt):
         self.show_voxels(all_voxel_indices, random_classes)
 
     def __DEMO__load_custom_classes(self):
-        custom_classes = {(0.8,0.5,0.2):["orange_color"],(0.2,0.9,0.2):["green_color"],(0.9,0.1,0.1):["blank red --invisible"],(0.8,0.1,0.9):["purple_color"]}
-        self.load_classes_from_dictionary(custom_classes)        
+        custom_classes = {(0.8,0.5,0.2):["orange_color"],(0.2,0.9,0.2):["green_color","verde","multiple greens baby"],(0.9,0.1,0.1):["blank red --invisible"],(0.8,0.1,0.9):["purple_color"]}
+        self.load_classes_from_dictionary(custom_classes)         
 
     def visualize_occupancy_fn(self):
         pass

@@ -193,7 +193,6 @@ class Voxels:
         self.voxel_instancer.CreatePositionsAttr(voxel_centers)
         self.voxel_instancer.GetProtoIndicesAttr().Set(Vt.IntArray.FromNumpy(voxel_classes.cpu().numpy()))  
 
-
 def __DEPRECATED__create_mesh_voxel_prototype(self):
     """Creates the prototype voxel for the instancer."""
     """ 2---4                    5-------4      
