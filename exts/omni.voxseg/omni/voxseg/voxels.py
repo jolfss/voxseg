@@ -1,17 +1,20 @@
-from dataclasses import dataclass
+# general python
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 import torch
 from torch import Tensor
 import numpy as np
+
+# omniverse
 import pxr
 from pxr import Gf, UsdGeom, Sdf, Vt, UsdShade
 import omni
 from omni import ui
-import asyncio
 
-# TODO: Use @property to deal with the managed variables in this class.
+
 def get_stage():
     return omni.usd.get_context().get_stage()
+
+# TODO: Use @property to deal with the managed variables in this class.
 
 class Voxels:
     """Class for Visualizing Voxel Data within Omniverse.
@@ -84,7 +87,7 @@ class Voxels:
         self._voxel_centers_ = (1/G * (self._voxel_indices_ - (G-1)/2)) * W
         self._voxel_prims_   = {}
         self.num_voxels      = _G_[0]*_G_[1]*_G_[2]
-
+    
     def toggle_global_visibility(self, set_visibility_setting: Optional[bool]=None):
         """Toggles or sets global visibility for *all* voxels in the stage.
         Args:
@@ -112,6 +115,7 @@ class Voxels:
 
     def initialize_instancer(self):
         """TODO: Docs"""
+        omni.usd.get_context().get_stage().RemovePrim(F"{self.voxel_prim_directory}/voxel_instancer")
         voxel_instancer_prim_path = F"{self.voxel_prim_directory}/voxel_instancer"
         self.voxel_instancer = UsdGeom.PointInstancer.Define(get_stage(), voxel_instancer_prim_path)
 
@@ -120,13 +124,14 @@ class Voxels:
         Args:
             color (int): The integer containing which color the voxel will be. 
             NOTE r,g,b /in [0,1].
+            invisible (bool option): Whether or not this voxel should be visible.
             
         Returns: 
             protoindex (int): The protoindex pointing to the voxel prototype of the given color."""
         
-        # TODO: This should be an async call in the init which waits for the stage to be initialized.     
-        
-        self.initialize_instancer()  
+        # TODO: This should be an async call in the init which waits for the stage to be initialized but this works.
+        if not hasattr(self, "voxel_instancer"):
+            self.initialize_instancer()  
 
         # If already registered just return the existing version.
         if color in self.color_to_protoindex.keys():
@@ -135,7 +140,7 @@ class Voxels:
         stage = omni.usd.get_context().get_stage()
        
         # Create a new cube prim
-        prim_name = F"voxel_{int(255*color[0])}_{int(255*color[1])}_{int(255*color[2])}" # TODO: Maybe take in a custom name.
+        prim_name = F"voxel_{int(255*color[0])}_{int(255*color[1])}_{int(255*color[2])}" # TODO: Use class name?
         prim_path = F"{self.voxel_prim_directory}/prototypes/voxel_{prim_name}"
         cube = UsdGeom.Cube.Define(stage, prim_path)
 
@@ -156,7 +161,9 @@ class Voxels:
         self.color_to_protoindex.update({color : new_index})
         self.voxel_prototypes.append(prim_path)
 
-        # TODO: Figure out how to hide the prototype but not the instances. Some voxels we do want invisible though, this does that.
+        # TODO: Figure out how to hide the prototype but not the instances.
+
+        # If we *actually* want the instanced voxels to be invisible, the below is called.
         if invisible:
             UsdGeom.Imageable(cube).MakeInvisible()
 
@@ -171,7 +178,7 @@ class Voxels:
         voxel_indices += 1
         return self._voxel_centers_[voxel_indices[:, 0], voxel_indices[:, 1], voxel_indices[:, 2], :]
 
-    def display_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):  
+    def create_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):  
         """Creates the voxel for the i,j,k-th voxel in the stage, or does nothing if it already exists.
         Args:
             voxel_indices (N,3): Stack of row vectors [i,j,k] denoting which voxels to create.
@@ -183,21 +190,8 @@ class Voxels:
         voxel_indices += 1
     
         voxel_centers = Vt.Vec3fArray.FromNumpy(self.get_voxel_centers(voxel_indices).cpu().numpy())
-
         self.voxel_instancer.CreatePositionsAttr(voxel_centers)
-
         self.voxel_instancer.GetProtoIndicesAttr().Set(Vt.IntArray.FromNumpy(voxel_classes.cpu().numpy()))  
-
-
-
-
-
-
-
-
-
-
-
 
 
 def __DEPRECATED__create_mesh_voxel_prototype(self):
