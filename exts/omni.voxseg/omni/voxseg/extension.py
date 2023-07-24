@@ -15,10 +15,6 @@ from omni.ui import \
     , AbstractValueModel, AbstractItemModel, AbstractItem, MultiFloatDragField, MultiIntDragField\
     , Fraction
 
-# ros server
-# from costmap_2d.msg import VoxelGrid
-from std_msgs.msg import String
-
 # library
 from .voxels import Voxels
 
@@ -36,6 +32,8 @@ class MyExtension(omni.ext.IExt):
     """The extension object for VoxSeg."""
 
     voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
+    preview_voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
+
     "The container object for voxel data."
     "TODO"
    
@@ -92,8 +90,10 @@ class MyExtension(omni.ext.IExt):
             (cx,cy,cz), (wx,wy,wz), (gx,gy,gz)"""
         model = self.multi_float_voxel_center.model
         voxel_center=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
+
         model = self.multi_float_world_dims.model
         world_dims=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
+
         model = self.multi_int_grid_dims.model
         grid_dims=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
 
@@ -103,31 +103,34 @@ class MyExtension(omni.ext.IExt):
         """Returns (as values):
             (cx,cy,cz), (wx,wy,wz), (gx,gy,gz)"""
         (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
+
         cx, cy, cz = cx.as_float, cy.as_float, cz.as_float
         wx, wy, wz = wx.as_float, wy.as_float, wz.as_float
         gx, gy, gz = gx.as_int,   gy.as_int,   gz.as_int
+
         return (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) 
 
     def apply_preview_callbacks(self):
         """Previews the voxel space."""
-        def preview_fn(dummy=None):
-            if omni.usd.get_context().get_stage().GetPrimAtPath("/World/voxseg/preview").IsValid():
-                omni.kit.commands.execute('DeletePrims',paths=["/World/voxseg/preview/voxel_instancer"],destructive=True)
-                
-            _,world_dims,(gx,gy,gz)= self.get_domain_values()
-            preview_voxels : Voxels = Voxels(world_dims, (gx,gy,gz),voxel_prim_directory="/World/voxseg/preview")
-            preview_voxels.register_new_voxel_color((0,0,0))
-            preview_voxels.register_new_voxel_color((1,1,1))
-            shell_indices = preview_voxels.shell_indices()
+        enable_preview_fn = lambda _: self.preview_voxels.toggle_global_visibility(True)
+        def while_previewing_fn(dummy=None):
+            _,world_dims,(gx,gy,gz)= self.get_domain_values()  
 
+            self.preview_voxels.resize_domain(world_dims, (gx,gy,gz))
+
+            self.preview_voxels.register_new_voxel_color((0,0,0))
+            self.preview_voxels.register_new_voxel_color((1,1,1))
+            
+            shell_indices = self.preview_voxels.shell_indices() - 1 
             checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
-
-            preview_voxels.create_voxels(shell_indices, checkerboard_classes)
+            self.preview_voxels.create_voxels(shell_indices, checkerboard_classes)
+        disable_preview_fn = lambda _ : self.preview_voxels.toggle_global_visibility(False)
 
         (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
         for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
-            model.add_begin_edit_fn(preview_fn)
-            model.add_end_edit_fn(preview_fn)
+            model.add_begin_edit_fn(enable_preview_fn)
+            model.add_value_changed_fn(while_previewing_fn)
+            model.add_end_edit_fn(disable_preview_fn)
 
     def disable_domain_editing(self):
         """TODO: Docs"""
@@ -320,7 +323,7 @@ class MyExtension(omni.ext.IExt):
                 Button("--DEBUG load classes from dictionary", clicked_fn=self.__DEMO__load_custom_classes)
                 Button("--DEBUG show preview", clicked_fn=self.__DEMO__show_preview)
                 Button("--DEBUG randomize over current labels", clicked_fn=self.__DEMO__create_randomly_labeled_voxels)
-                Button("visualize occupancy")
+                Button("visualize occupancy", clicked_fn=lambda : breakpoint())
                 Button("segment over labels")
                 Button("clear segments")
                 Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle_global_visibility())

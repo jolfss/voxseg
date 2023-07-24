@@ -22,7 +22,7 @@ class Voxels:
     #---------------------#
     #   class variables   #
     #---------------------#
-    voxel_prim_directory : str = "/World/voxseg"
+    voxel_prim_directory : str
     "The location of the voxel prims."
 
     voxel_instancer : UsdGeom.PointInstancer
@@ -64,7 +64,7 @@ class Voxels:
     _voxel_centers_ : Tensor
     "(gx,gy,gz,:) At each i,j,k, a tensor corresponding to the center in world space of voxel_ijk."
 
-    def __init__(self, world_dims, grid_dims, device='cpu', voxel_prim_directory=voxel_prim_directory):
+    def __init__(self, world_dims, grid_dims, device='cpu', voxel_prim_directory="/World/voxels"):
         """TODO: Docs"""
         self.grid_dims      = grid_dims
         self._grid_dims_    = grid_dims[0]+2, grid_dims[1]+2, grid_dims[2]+2
@@ -87,6 +87,32 @@ class Voxels:
         self._voxel_centers_ = (1/G * (self._voxel_indices_ - (G-1)/2)) * W
         self._voxel_prims_   = {}
         self.num_voxels      = _G_[0]*_G_[1]*_G_[2]
+
+    def resize_domain(self, world_dims : Tuple[float,float,float], grid_dims:Tuple[int,int,int]):
+        self.color_to_protoindex.clear()
+        self.voxel_prototypes = []
+
+        # Initialize like normal--------------------
+        self.grid_dims      = grid_dims
+        self._grid_dims_    = grid_dims[0]+2, grid_dims[1]+2, grid_dims[2]+2
+        self.world_dims     = world_dims
+
+        G = self.G = torch.tensor([grid_dims[0], grid_dims[1], grid_dims[2]], device=self.device)
+        W = self.W = torch.tensor([world_dims[0],world_dims[1],world_dims[2]], device=self.device)
+
+        # Create buffer, a voxel shell capping each dimension. Underscores are intended to denote the boundary _GRID_.
+        _G_ = self._G_ = torch.tensor([G[0]+2, G[1]+2, G[2]+2], device=self.device) 
+        X   = torch.arange(_G_[0], device=self.device).view(-1, 1, 1).expand(-1,    _G_[1],_G_[2])
+        Y   = torch.arange(_G_[1], device=self.device).view(1, -1, 1).expand(_G_[0],-1,    _G_[2])
+        Z   = torch.arange(_G_[2], device=self.device).view(1, 1, -1).expand(_G_[0],_G_[1],-1    )
+
+        # Shifts everything down one in all dimensions to make the buffer.
+        self._voxel_indices_ = torch.stack((X,Y,Z), dim=-1) - 1 
+        self._voxel_centers_ = (1/G * (self._voxel_indices_ - (G-1)/2)) * W
+        self._voxel_prims_   = {}
+        self.num_voxels      = _G_[0]*_G_[1]*_G_[2]
+        #-------------------------------------------
+
     
     def toggle_global_visibility(self, set_visibility_setting: Optional[bool]=None):
         """Toggles or sets global visibility for *all* voxels in the stage.
@@ -98,11 +124,9 @@ class Voxels:
         imageable = UsdGeom.Imageable(self.voxel_instancer)
 
         if self.is_visible:
-            print("Making Visible")
             imageable.MakeVisible()
             self.is_visible = True
         else:
-            print("Making Invisible")
             imageable.MakeInvisible()
             self.is_visible = False
 
@@ -146,7 +170,24 @@ class Voxels:
 
         # Scale to the correct voxel dimensions
         sx, sy, sz = (self.W/(2*self.G))
-        UsdGeom.Xformable(cube).AddScaleOp().Set(value=(sx,sy,sz))
+        xformable = UsdGeom.Xformable(cube)
+
+        # Obtain all transformation operations on the Xformable
+        ops = xformable.GetOrderedXformOps()
+
+        # Check if a scale op already exists
+        scaleOp = None
+        for op in ops:
+            if op.GetOpType() == UsdGeom.XformOp.TypeScale:
+                scaleOp = op
+                break
+
+        # If it doesn't exist, add a new scale op
+        if not scaleOp:
+            scaleOp = xformable.AddScaleOp()
+
+        # Set the value for the scale op
+        scaleOp.Set(value=(sx, sy, sz))
 
         # Set color
         cube.GetDisplayColorAttr().Set([(Gf.Vec3f(*color))])
@@ -163,7 +204,6 @@ class Voxels:
 
         # TODO: Figure out how to hide the prototype but not the instances.
 
-        # If we *actually* want the instanced voxels to be invisible, the below is called.
         if invisible:
             UsdGeom.Imageable(cube).MakeInvisible()
 
@@ -191,7 +231,7 @@ class Voxels:
     
         voxel_centers = Vt.Vec3fArray.FromNumpy(self.get_voxel_centers(voxel_indices).cpu().numpy())
         self.voxel_instancer.CreatePositionsAttr(voxel_centers)
-        self.voxel_instancer.GetProtoIndicesAttr().Set(Vt.IntArray.FromNumpy(voxel_classes.cpu().numpy()))  
+        self.voxel_instancer.CreateProtoIndicesAttr().Set(Vt.IntArray.FromNumpy(voxel_classes.cpu().numpy()))  
 
     def all_indices(self):
         """TODO: Docs"""
@@ -207,13 +247,6 @@ class Voxels:
         gx,gy,gz = self.grid_dims
 
         indices = []
-        """
-          *-------*      
-         /|      /|      Triangle Faces (12)
-        z-|-----* |      
-        | y-----|-*   
-        |/      |/       
-        0-------x      """
 
         #z=[0,gz-1]
         for x in [0,gx-1]:
