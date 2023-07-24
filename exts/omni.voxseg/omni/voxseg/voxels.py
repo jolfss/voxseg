@@ -201,7 +201,31 @@ class Voxels:
         GXEP, GYEP = GXE.permute(2,1,0), GYE.permute(0,2,1)
         all_voxel_indices = torch.stack((GXEP,GYEP,GZE),dim=3).view(-1,3)
         return all_voxel_indices
-    
+
+    def shell_indices(self):
+        """TODO: Docs"""
+        gx,gy,gz = self.grid_dims
+
+        indices = []
+
+        #z=[0,gz-1]
+        for x in [0,gx-1]:
+            for y in range(gy):
+                for z in range(gz):
+                    indices.append([x,y,z])
+        #z=[0,gz-1]
+        for y in [0,gy-1]:
+            for x in range(gx):
+                for z in range(gz):
+                    indices.append([x,y,z])
+        #z=[0,gz-1]
+        for z in [0,gz-1]:
+            for x in range(gx):
+                for y in range(gy):
+                    indices.append([x,y,z])
+
+        return Tensor(indices).long()
+
 def __DEPRECATED__create_mesh_voxel_prototype(self):
     """Creates the prototype voxel for the instancer."""
     """ 2---4                    5-------4      

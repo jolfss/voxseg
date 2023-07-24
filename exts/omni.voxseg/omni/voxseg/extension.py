@@ -14,6 +14,10 @@ from omni.ui import \
     , AbstractValueModel, AbstractItemModel, AbstractItem, MultiFloatDragField, MultiIntDragField\
     , Fraction
 
+# ros server
+import client
+from client import VoxSegClient
+
 # library
 from .voxels import Voxels
 
@@ -33,6 +37,10 @@ class MyExtension(omni.ext.IExt):
     preview_voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
     voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
     "The container object for voxel data."
+    voxseg_client : VoxSegClient = VoxSegClient()
+    "TODO"
+    
+
 
     def on_startup(self, ext_id):
         """TODO: Describe the order of initialization sensitivities. (what depends on what)"""
@@ -80,9 +88,7 @@ class MyExtension(omni.ext.IExt):
                     Label(F"{TXTPAD}Grid Dims{TXTPAD}",width=Fraction(1))
                     self.multi_int_grid_dims = MultiIntDragField(*DEFAULT_GRID_DIMS,min=2,width=Fraction(3))
 
-        self.apply_domain_end_edit_callbacks()
-        self.apply_item_changed_callbacks()
-        self.apply_domain_begin_edit_callbacks()
+        self.apply_preview_callbacks()
 
     def get_domain_value_models(self):
         """Returns (as value models):
@@ -105,52 +111,27 @@ class MyExtension(omni.ext.IExt):
         gx, gy, gz = gx.as_int,   gy.as_int,   gz.as_int
         return (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) 
 
-
-    def apply_domain_begin_edit_callbacks(self):
-        """Previews the voxel space."""
-        def show_preview_box(dummy=None):
-            if not hasattr(self, "preview_cube"):
-                stage = omni.usd.get_context().get_stage()
-                self.preview_cube_prim_path = F"{self.voxels.voxel_prim_directory}/preview/preview_box"
-                self.preview_cube = UsdGeom.Cube.Define(stage, self.preview_cube_prim_path)
-            UsdGeom.Imageable(self.preview_cube).MakeVisible()
-
-        # NOTE: Implemented this way because MultiFields don't trigger the begin_edit.
-        (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
-        for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
-            model.add_begin_edit_fn(show_preview_box)
-
-    def apply_item_changed_callbacks(self):
+    def apply_preview_callbacks(self):
         """Previews the voxel space."""
         def preview_fn(dummy=None):
-            _,(wx,wy,wz),_ = self.get_domain_values()
-            sx, sy, sz = wx/2, wy/2, wz/2
-            
-            xformable = UsdGeom.Xformable(self.preview_cube)
+            _,world_dims,(gx,gy,gz)= self.get_domain_values()
+            preview_voxels : Voxels = Voxels(world_dims, (gx,gy,gz),voxel_prim_directory="/World/voxseg/preview")
+            preview_voxels.register_new_voxel_color((0,0,0))
+            preview_voxels.register_new_voxel_color((1,1,1))
+            shell_indices = preview_voxels.shell_indices()
 
-            # check if ScaleOp already exists
-            for op in xformable.GetOrderedXformOps():
-                if op.GetOpType() == UsdGeom.XformOp.TypeScale:
-                    op.Set(value=(sx, sy, sz))
-                    return
-                
-            xformable.AddScaleOp().Set(value=(sx, sy, sz))
+            checkerboard_classes = torch.arange(len(shell_indices)) % 2
+            preview_voxels.create_voxels(shell_indices, checkerboard_classes)
+
+        def update_voxels_and_delete_preview(_):
+            center, world_dims, grid_dims = self.get_domain_values()
+            self.voxels = Voxels(world_dims, grid_dims) # TODO: Voxel center
+            omni.kit.commands.execute('DeletePrims',paths=["/World/voxseg/preview"],destructive=True)
 
         (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
         for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
             model.add_value_changed_fn(preview_fn)
-
-    def apply_domain_end_edit_callbacks(self):
-        "Replaces self.voxels with a new Voxels object with the correct dimension."
-        def reset_self_voxels_and_hide(_):
-            (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_values()
-            self.voxels = Voxels((wx,wy,wz),(gx,gy,gz)) # TODO: Voxel center
-            UsdGeom.Imageable(self.preview_cube).MakeInvisible()
-
-        # NOTE: Implemented this way because MultiFields don't trigger the begin_edit.
-        (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
-        for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
-            model.add_end_edit_fn(reset_self_voxels_and_hide)        
+            model.add_end_edit_fn(update_voxels_and_delete_preview)
 
     def disable_domain_editing(self):
         """TODO: Docs"""
@@ -267,6 +248,8 @@ class MyExtension(omni.ext.IExt):
         sublabels : list = self.dict_color_to_label[(r,g,b)] 
         sublabels.append(label)
 
+        self.voxseg_client.publish_class_names(names=sublabels)
+
         self.update_class_vstack()
 
     def build_class_label_editor(self):
@@ -333,6 +316,20 @@ class MyExtension(omni.ext.IExt):
     """
     TODO
     """
+    def build_visualization_tools(self):
+        """TODO: Docs"""
+        with CollapsableFrame("Voxel Visualization"):
+            with VStack(height=0,spacing=PAD):
+                with VStack():
+                    Label(F"{TXTPAD}Total Occupied Voxels: <UNIMPLEMENTED>")
+                    Label(F"{TXTPAD}Number of Photos: <UNIMPLEMENTED>")
+                Button("--DEBUG load classes from dictionary", clicked_fn=self.__DEMO__load_custom_classes)
+                Button("--DEBUG show preview", clicked_fn=self.__DEMO__show_preview)
+                Button("--DEBUG randomize over current labels", clicked_fn=self.__DEMO__create_randomly_labeled_voxels)
+                Button("visualize occupancy")
+                Button("segment over labels")
+                Button("clear segments")
+                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle_global_visibility())
 
     def show_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):
         """Populates the world with all of the voxels specified, removing any that were there before.
@@ -362,24 +359,22 @@ class MyExtension(omni.ext.IExt):
         # See the above NOTE for figuring out what index to pass for each class.
         self.show_voxels(all_voxel_indices, random_classes)
 
+    def __DEMO__show_preview(self):
+        """Previews the voxel space."""
+        _,world_dims,(gx,gy,gz)= self.get_domain_values()
+        preview_voxels : Voxels = Voxels(world_dims, (gx,gy,gz),voxel_prim_directory="/World/voxseg/preview")
+        preview_voxels.register_new_voxel_color((0,0,0))
+        preview_voxels.register_new_voxel_color((1,1,1))
+        shell_indices = preview_voxels.shell_indices()
+
+        checkerboard_classes = torch.arange(len(shell_indices)) % 2
+
+        breakpoint()
+        preview_voxels.create_voxels(shell_indices, checkerboard_classes)
+
     def __DEMO__load_custom_classes(self):
         custom_classes = {(0.8,0.5,0.2):["orange_color"],(0.2,0.9,0.2):["green_color","verde","multiple greens baby"],(0.9,0.1,0.1):["blank red --invisible"],(0.8,0.1,0.9):["purple_color"]}
         self.load_classes_from_dictionary(custom_classes)         
 
     def visualize_occupancy_fn(self):
         pass
-
-    def build_visualization_tools(self):
-        """TODO: Docs"""
-        with CollapsableFrame("Voxel Visualization"):
-            with VStack(height=0,spacing=PAD):
-                with VStack():
-                    Label(F"{TXTPAD}Total Occupied Voxels: <UNIMPLEMENTED>")
-                    Label(F"{TXTPAD}Number of Photos: <UNIMPLEMENTED>")
-                Button("--DEBUG load classes from dictionary", clicked_fn=self.__DEMO__load_custom_classes)
-                Button("--DEBUG randomize over current labels", clicked_fn=self.__DEMO__create_randomly_labeled_voxels)
-                Button("visualize occupancy")
-                Button("segment over labels")
-                Button("clear segments")
-                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle_global_visibility())
-
