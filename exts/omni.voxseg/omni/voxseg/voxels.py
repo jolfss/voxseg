@@ -193,6 +193,15 @@ class Voxels:
         self.voxel_instancer.CreatePositionsAttr(voxel_centers)
         self.voxel_instancer.GetProtoIndicesAttr().Set(Vt.IntArray.FromNumpy(voxel_classes.cpu().numpy()))  
 
+    def all_indices(self):
+        """TODO: Docs"""
+        gx,gy,gz = self.grid_dims
+        GX, GY, GZ = torch.arange(gx),torch.arange(gy),torch.arange(gz)
+        GXE, GYE, GZE = GX.expand(gz,gy,-1), GY.expand(gx,gz,-1), GZ.expand(gx,gy,-1)
+        GXEP, GYEP = GXE.permute(2,1,0), GYE.permute(0,2,1)
+        all_voxel_indices = torch.stack((GXEP,GYEP,GZE),dim=3).view(-1,3)
+        return all_voxel_indices
+    
 def __DEPRECATED__create_mesh_voxel_prototype(self):
     """Creates the prototype voxel for the instancer."""
     """ 2---4                    5-------4      

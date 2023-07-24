@@ -5,6 +5,7 @@ import torch
 from torch import Tensor
 
 # omniverse
+from pxr import UsdGeom, Gf 
 import omni.ext
 import omni.ui as ui
 from omni.ui import \
@@ -29,6 +30,7 @@ DEFAULT_GRID_DIMS  =   (100, 100, 40)
 class MyExtension(omni.ext.IExt):
     """The extension object for VoxSeg."""
 
+    preview_voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
     voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
     "The container object for voxel data."
 
@@ -70,22 +72,20 @@ class MyExtension(omni.ext.IExt):
             with VStack(height=0,spacing=PAD):
                 with HStack():
                     Label(F"{TXTPAD}Voxel Center{TXTPAD}",width=Fraction(1))
-                    self.multi_float_voxel_center = MultiFloatDragField(*DEFAULT_VOXEL_CENTER,width=Fraction(3))       
-                    self.multi_float_voxel_center.model.add_item_changed_fn(self.apply_preview_domain_callback)             
+                    self.multi_float_voxel_center = MultiFloatDragField(*DEFAULT_VOXEL_CENTER,width=Fraction(3))                    
                 with HStack():
                     Label(F"{TXTPAD}World Dims{TXTPAD}",width=Fraction(1))
                     self.multi_float_world_dims = MultiFloatDragField(*DEFAULT_WORLD_DIMS,min=1,step=0.1,width=Fraction(3))
-                    self.multi_float_voxel_center.model.add_item_changed_fn(self.apply_preview_domain_callback)  
                 with HStack():
                     Label(F"{TXTPAD}Grid Dims{TXTPAD}",width=Fraction(1))
                     self.multi_int_grid_dims = MultiIntDragField(*DEFAULT_GRID_DIMS,min=2,width=Fraction(3))
-                    self.multi_float_voxel_center.model.add_item_changed_fn(self.apply_preview_domain_callback)  
 
-        self.apply_domain_end_edit_callbacks() # NOTE: I had to do this because MultiFields do not respond to end_edit, only item_changed.
+        self.apply_domain_end_edit_callbacks()
+        self.apply_item_changed_callbacks()
+        self.apply_domain_begin_edit_callbacks()
 
     def get_domain_value_models(self):
-        """TODO: Docs
-        Returns (as value models):
+        """Returns (as value models):
             (cx,cy,cz), (wx,wy,wz), (gx,gy,gz)"""
         model = self.multi_float_voxel_center.model
         voxel_center=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
@@ -96,30 +96,61 @@ class MyExtension(omni.ext.IExt):
 
         return tuple(voxel_center), tuple(world_dims), tuple(grid_dims)
 
-    # TODO: Preview the domain bounds.
-    def apply_preview_domain_callback(self, abstract_item_model : AbstractItemModel, abstract_item : AbstractItem):
-        """Previews the voxel space."""
-        pass
+    def get_domain_values(self):
+        """Returns (as values):
+            (cx,cy,cz), (wx,wy,wz), (gx,gy,gz)"""
+        (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
+        cx, cy, cz = cx.as_float, cy.as_float, cz.as_float
+        wx, wy, wz = wx.as_float, wy.as_float, wz.as_float
+        gx, gy, gz = gx.as_int,   gy.as_int,   gz.as_int
+        return (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) 
 
-    def apply_domain_end_edit_callbacks(self):
-        """TODO: Docs"""
-        def reset_self_voxels(_):
-            (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
-            cx, cy, cz = cx.as_float, cy.as_float, cz.as_float # NOTE: Currently voxel center is not supported.
-            wx, wy, wz = wx.as_float, wy.as_float, wz.as_float
-            gx, gy, gz = gx.as_int,   gy.as_int,   gz.as_int
-            self.voxels = Voxels((wx,wy,wz),(gx,gy,gz))
+
+    def apply_domain_begin_edit_callbacks(self):
+        """Previews the voxel space."""
+        def show_preview_box(dummy=None):
+            if not hasattr(self, "preview_cube"):
+                stage = omni.usd.get_context().get_stage()
+                self.preview_cube_prim_path = F"{self.voxels.voxel_prim_directory}/preview/preview_box"
+                self.preview_cube = UsdGeom.Cube.Define(stage, self.preview_cube_prim_path)
+            UsdGeom.Imageable(self.preview_cube).MakeVisible()
+
+        # NOTE: Implemented this way because MultiFields don't trigger the begin_edit.
+        (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
+        for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
+            model.add_begin_edit_fn(show_preview_box)
+
+    def apply_item_changed_callbacks(self):
+        """Previews the voxel space."""
+        def preview_fn(dummy=None):
+            _,(wx,wy,wz),_ = self.get_domain_values()
+            sx, sy, sz = wx/2, wy/2, wz/2
+            
+            xformable = UsdGeom.Xformable(self.preview_cube)
+
+            # check if ScaleOp already exists
+            for op in xformable.GetOrderedXformOps():
+                if op.GetOpType() == UsdGeom.XformOp.TypeScale:
+                    op.Set(value=(sx, sy, sz))
+                    return
+                
+            xformable.AddScaleOp().Set(value=(sx, sy, sz))
 
         (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
-        cx.add_end_edit_fn(reset_self_voxels)
-        cy.add_end_edit_fn(reset_self_voxels)
-        cz.add_end_edit_fn(reset_self_voxels)
-        wx.add_end_edit_fn(reset_self_voxels)
-        wy.add_end_edit_fn(reset_self_voxels)
-        wz.add_end_edit_fn(reset_self_voxels)
-        gx.add_end_edit_fn(reset_self_voxels)
-        gy.add_end_edit_fn(reset_self_voxels)
-        gz.add_end_edit_fn(reset_self_voxels)
+        for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
+            model.add_value_changed_fn(preview_fn)
+
+    def apply_domain_end_edit_callbacks(self):
+        "Replaces self.voxels with a new Voxels object with the correct dimension."
+        def reset_self_voxels_and_hide(_):
+            (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_values()
+            self.voxels = Voxels((wx,wy,wz),(gx,gy,gz)) # TODO: Voxel center
+            UsdGeom.Imageable(self.preview_cube).MakeInvisible()
+
+        # NOTE: Implemented this way because MultiFields don't trigger the begin_edit.
+        (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
+        for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
+            model.add_end_edit_fn(reset_self_voxels_and_hide)        
 
     def disable_domain_editing(self):
         """TODO: Docs"""
@@ -314,11 +345,7 @@ class MyExtension(omni.ext.IExt):
 
     def __DEMO__create_randomly_labeled_voxels(self):
         # Create set of all indices in the voxel grid then reshape to (N,3)
-        gx,gy,gz = self.voxels.grid_dims
-        GX, GY, GZ = torch.arange(gx),torch.arange(gy),torch.arange(gz)
-        GXE, GYE, GZE = GX.expand(gz,gy,-1), GY.expand(gx,gz,-1), GZ.expand(gx,gy,-1)
-        GXEP, GYEP = GXE.permute(2,1,0), GYE.permute(0,2,1)
-        all_voxel_indices = torch.stack((GXEP,GYEP,GZE),dim=3).view(-1,3)
+        all_voxel_indices = self.voxels.all_indices()
 
         # Register a new voxel color per class.
         class_colors = self.dict_color_to_label.keys()
