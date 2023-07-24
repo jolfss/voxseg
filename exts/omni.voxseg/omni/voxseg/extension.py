@@ -5,7 +5,8 @@ import torch
 from torch import Tensor
 
 # omniverse
-from pxr import UsdGeom, Gf 
+import pxr
+from pxr import UsdGeom, Gf
 import omni.ext
 import omni.ui as ui
 from omni.ui import \
@@ -15,8 +16,8 @@ from omni.ui import \
     , Fraction
 
 # ros server
-import client
-from client import VoxSegClient
+# from costmap_2d.msg import VoxelGrid
+from std_msgs.msg import String
 
 # library
 from .voxels import Voxels
@@ -34,14 +35,10 @@ DEFAULT_GRID_DIMS  =   (100, 100, 40)
 class MyExtension(omni.ext.IExt):
     """The extension object for VoxSeg."""
 
-    preview_voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
     voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
     "The container object for voxel data."
-    voxseg_client : VoxSegClient = VoxSegClient()
     "TODO"
-    
-
-
+   
     def on_startup(self, ext_id):
         """TODO: Describe the order of initialization sensitivities. (what depends on what)"""
         print("[omni.voxseg] VoxSeg on_startup")
@@ -114,24 +111,23 @@ class MyExtension(omni.ext.IExt):
     def apply_preview_callbacks(self):
         """Previews the voxel space."""
         def preview_fn(dummy=None):
+            if omni.usd.get_context().get_stage().GetPrimAtPath("/World/voxseg/preview").IsValid():
+                omni.kit.commands.execute('DeletePrims',paths=["/World/voxseg/preview/voxel_instancer"],destructive=True)
+                
             _,world_dims,(gx,gy,gz)= self.get_domain_values()
             preview_voxels : Voxels = Voxels(world_dims, (gx,gy,gz),voxel_prim_directory="/World/voxseg/preview")
             preview_voxels.register_new_voxel_color((0,0,0))
             preview_voxels.register_new_voxel_color((1,1,1))
             shell_indices = preview_voxels.shell_indices()
 
-            checkerboard_classes = torch.arange(len(shell_indices)) % 2
-            preview_voxels.create_voxels(shell_indices, checkerboard_classes)
+            checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
 
-        def update_voxels_and_delete_preview(_):
-            center, world_dims, grid_dims = self.get_domain_values()
-            self.voxels = Voxels(world_dims, grid_dims) # TODO: Voxel center
-            omni.kit.commands.execute('DeletePrims',paths=["/World/voxseg/preview"],destructive=True)
+            preview_voxels.create_voxels(shell_indices, checkerboard_classes)
 
         (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
         for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
-            model.add_value_changed_fn(preview_fn)
-            model.add_end_edit_fn(update_voxels_and_delete_preview)
+            model.add_begin_edit_fn(preview_fn)
+            model.add_end_edit_fn(preview_fn)
 
     def disable_domain_editing(self):
         """TODO: Docs"""
@@ -247,8 +243,6 @@ class MyExtension(omni.ext.IExt):
 
         sublabels : list = self.dict_color_to_label[(r,g,b)] 
         sublabels.append(label)
-
-        self.voxseg_client.publish_class_names(names=sublabels)
 
         self.update_class_vstack()
 
@@ -367,9 +361,8 @@ class MyExtension(omni.ext.IExt):
         preview_voxels.register_new_voxel_color((1,1,1))
         shell_indices = preview_voxels.shell_indices()
 
-        checkerboard_classes = torch.arange(len(shell_indices)) % 2
+        checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
 
-        breakpoint()
         preview_voxels.create_voxels(shell_indices, checkerboard_classes)
 
     def __DEMO__load_custom_classes(self):

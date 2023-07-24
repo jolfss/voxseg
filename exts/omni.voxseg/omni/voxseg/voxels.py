@@ -207,6 +207,13 @@ class Voxels:
         gx,gy,gz = self.grid_dims
 
         indices = []
+        """
+          *-------*      
+         /|      /|      Triangle Faces (12)
+        z-|-----* |      
+        | y-----|-*   
+        |/      |/       
+        0-------x      """
 
         #z=[0,gz-1]
         for x in [0,gx-1]:
@@ -215,14 +222,14 @@ class Voxels:
                     indices.append([x,y,z])
         #z=[0,gz-1]
         for y in [0,gy-1]:
-            for x in range(gx):
+            for x in range(gx-2):
                 for z in range(gz):
-                    indices.append([x,y,z])
+                    indices.append([x+1,y,z])
         #z=[0,gz-1]
         for z in [0,gz-1]:
-            for x in range(gx):
-                for y in range(gy):
-                    indices.append([x,y,z])
+            for x in range(gx-2):
+                for y in range(gy-2):
+                    indices.append([x+1,y+1,z])
 
         return Tensor(indices).long()
 
