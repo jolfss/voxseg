@@ -121,7 +121,7 @@ class MyExtension(omni.ext.IExt):
         def while_previewing_fn(dummy=None):
             _,(gx,gy,gz),world_dims= self.get_domain_values()  
 
-            self.preview_voxels.redomain((gx,gy,gz),world_dims)
+            self.preview_voxels.reinit((gx,gy,gz),world_dims)
 
             self.preview_voxels.register_new_voxel_color((0,0,0))
             self.preview_voxels.register_new_voxel_color((1,1,1))
