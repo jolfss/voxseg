@@ -1,3 +1,4 @@
+
 # general python
 from typing import Dict, List, Optional, Tuple
 import numpy as np
@@ -5,6 +6,8 @@ import torch
 from torch import Tensor
 
 # omniverse
+import omni
+import carb
 import pxr
 from pxr import UsdGeom, Gf
 import omni.ext
@@ -14,10 +17,27 @@ from omni.ui import \
     , Label, StringField, ColorWidget, Button \
     , AbstractValueModel, AbstractItemModel, AbstractItem, MultiFloatDragField, MultiIntDragField\
     , Fraction
+from omni.isaac.core.utils.extensions import enable_extension
+
+#ROS Configuration 
+
+enable_extension("omni.isaac.ros_bridge") # Make sure ros instance is running
+import rosgraph 
+
+if not rosgraph.is_master_online():
+    carb.log_error("Plase re-launch extention after launching roscore!!!")
 
 # ros server
 # from costmap_2d.msg import VoxelGrid
+
+
+# import os
+# print(os.environ)
+
 from std_msgs.msg import String
+from geometry_msgs.msg import Point32
+#from costmap_2d.msg import VoxelGrid
+from .client import VoxSegClient
 
 # library
 from .voxels import Voxels
@@ -44,7 +64,9 @@ class MyExtension(omni.ext.IExt):
         print("[omni.voxseg] VoxSeg on_startup")
         self.voxels = Voxels(DEFAULT_WORLD_DIMS,DEFAULT_GRID_DIMS)
 
-        self.window = self.build_extension()                   
+        self.window = self.build_extension()
+
+        self.client = VoxSegClient()                   
 
     def on_shutdown(self):
         """TODO: """
