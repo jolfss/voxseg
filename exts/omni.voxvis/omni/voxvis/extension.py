@@ -17,6 +17,7 @@ from omni.ui import \
 
 # library
 from .voxels import Voxels
+from .client import VoxSegClient
 
 # NOTE: Adding elements to a Container must be done by a method *OUTSIDE* the container. 
 
@@ -42,7 +43,8 @@ class MyExtension(omni.ext.IExt):
         print("[omni.voxvis] voxvis on_startup")
         self.voxels = Voxels(DEFAULT_GRID_DIMS, DEFAULT_WORLD_DIMS)
 
-        self.window = self.build_extension()                   
+        self.window = self.build_extension()   
+        self.client = VoxSegClient()                
 
     def on_shutdown(self):
         """TODO: """
