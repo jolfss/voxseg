@@ -3,7 +3,7 @@
 version = "1.0.0"
 
 # The title and description fields are primarily for displaying extension info in UI
-title = "Voxel Semantic Segmentation (VoxSeg)"
+title = "Voxel Semantic Segmentation (voxvis)"
 description = "TODO DESCRIPTION."
 
 # Path (relative to the root) or content of readme markdown file for UI.
@@ -13,7 +13,7 @@ readme  = "docs/README.md"
 changelog = "docs/CHANGELOG.md"
 
 # URL of the extension source repository.
-repository = "https://github.com/jolfss/voxseg"
+repository = "https://github.com/jolfss/voxvis"
 
 # One of categories for UI.
 category = "Example"
@@ -31,9 +31,9 @@ preview_image = "data/preview.png"
 [dependencies]
 "omni.kit.uiapp" = {}
 
-# Main python module this extension provides, it will be publicly available as "import omni.voxseg".
+# Main python module this extension provides, it will be publicly available as "import omni.voxvis".
 [[python.module]]
-name = "omni.voxseg"
+name = "omni.voxvis"
 
 [[test]]
 # Extra dependencies only to be used during test run

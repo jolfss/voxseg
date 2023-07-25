@@ -1,4 +1,3 @@
-
 # general python
 from typing import Dict, List, Optional, Tuple
 import numpy as np
@@ -6,8 +5,6 @@ import torch
 from torch import Tensor
 
 # omniverse
-import omni
-import carb
 import pxr
 from pxr import UsdGeom, Gf
 import omni.ext
@@ -17,27 +14,6 @@ from omni.ui import \
     , Label, StringField, ColorWidget, Button \
     , AbstractValueModel, AbstractItemModel, AbstractItem, MultiFloatDragField, MultiIntDragField\
     , Fraction
-from omni.isaac.core.utils.extensions import enable_extension
-
-#ROS Configuration 
-
-enable_extension("omni.isaac.ros_bridge") # Make sure ros instance is running
-import rosgraph 
-
-if not rosgraph.is_master_online():
-    carb.log_error("Plase re-launch extention after launching roscore!!!")
-
-# ros server
-# from costmap_2d.msg import VoxelGrid
-
-
-# import os
-# print(os.environ)
-
-from std_msgs.msg import String
-from geometry_msgs.msg import Point32
-#from costmap_2d.msg import VoxelGrid
-from .client import VoxSegClient
 
 # library
 from .voxels import Voxels
@@ -49,32 +25,32 @@ TXTPAD = ' '*int(PAD/5)
 
 DEFAULT_VOXEL_CENTER = (0., 0., 0.)
 DEFAULT_WORLD_DIMS =   (20.,20.,8.)
-DEFAULT_GRID_DIMS  =   (100, 100, 40)
+DEFAULT_GRID_DIMS  =   (20, 20, 8)
 
 
 class MyExtension(omni.ext.IExt):
-    """The extension object for VoxSeg."""
+    """The extension object for voxvis."""
 
-    voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
+    voxels : Voxels = Voxels(DEFAULT_GRID_DIMS, DEFAULT_WORLD_DIMS)
+    preview_voxels : Voxels = Voxels(DEFAULT_GRID_DIMS, DEFAULT_WORLD_DIMS)
+
     "The container object for voxel data."
     "TODO"
    
     def on_startup(self, ext_id):
         """TODO: Describe the order of initialization sensitivities. (what depends on what)"""
-        print("[omni.voxseg] VoxSeg on_startup")
-        self.voxels = Voxels(DEFAULT_WORLD_DIMS,DEFAULT_GRID_DIMS)
+        print("[omni.voxvis] voxvis on_startup")
+        self.voxels = Voxels(DEFAULT_GRID_DIMS, DEFAULT_WORLD_DIMS)
 
-        self.window = self.build_extension()
-
-        self.client = VoxSegClient()                   
+        self.window = self.build_extension()                   
 
     def on_shutdown(self):
         """TODO: """
-        print("[omni.voxseg] VoxSeg on_shutdown")
+        print("[omni.voxvis] voxvis on_shutdown")
 
     def build_extension(self) -> Window:
-        """Builds the ui elements of the Voxseg Extension."""
-        window = Window("Voxseg", width=450, height=700, padding_x=PAD, padding_y=PAD)
+        """Builds the ui elements of the voxvis Extension."""
+        window = Window("voxvis", width=450, height=700, padding_x=PAD, padding_y=PAD)
         with window.frame:
             with ScrollingFrame():
                 with VStack(height=0.0,spacing=PAD):
@@ -94,62 +70,71 @@ class MyExtension(omni.ext.IExt):
     """
 
     def build_domain_editor(self):
-        """Creates the widget which will set voxseg parameters."""
-        with CollapsableFrame("Voxseg Parameters"):
+        """Creates the widget which will set voxvis parameters."""
+        with CollapsableFrame("voxvis Parameters"):
             with VStack(height=0,spacing=PAD):
                 with HStack():
                     Label(F"{TXTPAD}Voxel Center{TXTPAD}",width=Fraction(1))
-                    self.multi_float_voxel_center = MultiFloatDragField(*DEFAULT_VOXEL_CENTER,width=Fraction(3))                    
+                    self.multi_float_voxel_center = MultiFloatDragField(*DEFAULT_VOXEL_CENTER,width=Fraction(3))         
+                with HStack():
+                    Label(F"{TXTPAD}Grid Dims{TXTPAD}",width=Fraction(1))
+                    self.multi_int_grid_dims = MultiIntDragField(*DEFAULT_GRID_DIMS,min=2,width=Fraction(3))           
                 with HStack():
                     Label(F"{TXTPAD}World Dims{TXTPAD}",width=Fraction(1))
                     self.multi_float_world_dims = MultiFloatDragField(*DEFAULT_WORLD_DIMS,min=1,step=0.1,width=Fraction(3))
-                with HStack():
-                    Label(F"{TXTPAD}Grid Dims{TXTPAD}",width=Fraction(1))
-                    self.multi_int_grid_dims = MultiIntDragField(*DEFAULT_GRID_DIMS,min=2,width=Fraction(3))
+
 
         self.apply_preview_callbacks()
 
     def get_domain_value_models(self):
         """Returns (as value models):
-            (cx,cy,cz), (wx,wy,wz), (gx,gy,gz)"""
+            (cx,cy,cz), (gx,gy,gz), (wx,wy,wz),"""
         model = self.multi_float_voxel_center.model
         voxel_center=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
-        model = self.multi_float_world_dims.model
-        world_dims=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
+
         model = self.multi_int_grid_dims.model
         grid_dims=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
 
-        return tuple(voxel_center), tuple(world_dims), tuple(grid_dims)
+        model = self.multi_float_world_dims.model
+        world_dims=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
+
+        return tuple(voxel_center), tuple(grid_dims), tuple(world_dims)
 
     def get_domain_values(self):
         """Returns (as values):
-            (cx,cy,cz), (wx,wy,wz), (gx,gy,gz)"""
-        (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
+            (cx,cy,cz), (gx,gy,gz), (wx,wy,wz)"""
+        (cx,cy,cz), (gx,gy,gz), (wx,wy,wz)  = self.get_domain_value_models()
+
         cx, cy, cz = cx.as_float, cy.as_float, cz.as_float
-        wx, wy, wz = wx.as_float, wy.as_float, wz.as_float
         gx, gy, gz = gx.as_int,   gy.as_int,   gz.as_int
-        return (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) 
+        wx, wy, wz = wx.as_float, wy.as_float, wz.as_float
+
+
+        return (cx,cy,cz), (gx,gy,gz), (wx,wy,wz)
 
     def apply_preview_callbacks(self):
         """Previews the voxel space."""
-        def preview_fn(dummy=None):
-            if omni.usd.get_context().get_stage().GetPrimAtPath("/World/voxseg/preview").IsValid():
-                omni.kit.commands.execute('DeletePrims',paths=["/World/voxseg/preview/voxel_instancer"],destructive=True)
-                
-            _,world_dims,(gx,gy,gz)= self.get_domain_values()
-            preview_voxels : Voxels = Voxels(world_dims, (gx,gy,gz),voxel_prim_directory="/World/voxseg/preview")
-            preview_voxels.register_new_voxel_color((0,0,0))
-            preview_voxels.register_new_voxel_color((1,1,1))
-            shell_indices = preview_voxels.shell_indices()
+        enable_preview_fn = lambda _: self.preview_voxels.toggle(True)
 
+        def while_previewing_fn(dummy=None):
+            _,(gx,gy,gz),world_dims= self.get_domain_values()  
+
+            self.preview_voxels.redomain((gx,gy,gz),world_dims)
+
+            self.preview_voxels.register_new_voxel_color((0,0,0))
+            self.preview_voxels.register_new_voxel_color((1,1,1))
+            
+            shell_indices = self.preview_voxels.indices_shell()
             checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
+            self.preview_voxels.create_voxels(shell_indices, checkerboard_classes)
 
-            preview_voxels.create_voxels(shell_indices, checkerboard_classes)
+        disable_preview_fn = lambda _ : self.preview_voxels.toggle(False)
 
-        (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
-        for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
-            model.add_begin_edit_fn(preview_fn)
-            model.add_end_edit_fn(preview_fn)
+        (cx,cy,cz), (gx,gy,gz), (wx,wy,wz) = self.get_domain_value_models()
+        for model in [cx,cy,cz,gx,gy,gz,wx,wy,wz]:
+            model.add_begin_edit_fn(enable_preview_fn)
+            model.add_value_changed_fn(while_previewing_fn)
+            model.add_end_edit_fn(disable_preview_fn)
 
     def disable_domain_editing(self):
         """TODO: Docs"""
@@ -218,7 +203,7 @@ class MyExtension(omni.ext.IExt):
 
         # make random colors until one is not in the current list of colors
         while (r,g,b) in self.dict_color_to_label.keys():
-            print("[voxseg] Warning: A class tried to use a color which was already reserved, assigning a new color.")
+            print("[voxvis] Warning: A class tried to use a color which was already reserved, assigning a new color.")
             r,g,b = np.random.rand(3)
 
         # removes all colors with no sublabels, NOTE: Not the best way to do this but usually there are few colors
@@ -250,12 +235,12 @@ class MyExtension(omni.ext.IExt):
             return
         
         if (r,g,b) == self.default_class_color:
-            print(F"[voxseg] Warning: The color {self.default_class_color} is permanently reserved. Randomizing.")
+            print(F"[voxvis] Warning: The color {self.default_class_color} is permanently reserved. Randomizing.")
             self.create_new_class()
             return
         
         if label in self.dict_label_to_color.keys(): 
-            print(F"[voxseg] Warning: Label {label} is already reserved.")
+            print(F"[voxvis] Warning: Label {label} is already reserved.")
             return
 
         if not (r,g,b) in self.dict_color_to_label.keys(): # handle case where label is added before class
@@ -340,12 +325,11 @@ class MyExtension(omni.ext.IExt):
                     Label(F"{TXTPAD}Total Occupied Voxels: <UNIMPLEMENTED>")
                     Label(F"{TXTPAD}Number of Photos: <UNIMPLEMENTED>")
                 Button("--DEBUG load classes from dictionary", clicked_fn=self.__DEMO__load_custom_classes)
-                Button("--DEBUG show preview", clicked_fn=self.__DEMO__show_preview)
                 Button("--DEBUG randomize over current labels", clicked_fn=self.__DEMO__create_randomly_labeled_voxels)
-                Button("visualize occupancy")
+                Button("visualize occupancy", clicked_fn=lambda : breakpoint())
                 Button("segment over labels")
                 Button("clear segments")
-                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle_global_visibility())
+                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle())
 
     def show_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):
         """Populates the world with all of the voxels specified, removing any that were there before.
@@ -358,34 +342,21 @@ class MyExtension(omni.ext.IExt):
 
     def __DEMO__create_randomly_labeled_voxels(self):
         # Create set of all indices in the voxel grid then reshape to (N,3)
-        all_voxel_indices = self.voxels.all_indices()
+        all_voxel_indices = self.voxels.indices()
 
         # Register a new voxel color per class.
         class_colors = self.dict_color_to_label.keys()
         for color in class_colors:
-            has_invisibility_tag = \
-                "--invisible" in  self.dict_color_to_label[color][0] or " -i" in self.dict_color_to_label[color][0]
-            class_index = self.voxels.register_new_voxel_color(color, invisible=has_invisibility_tag)
+            i_tag = "--invisible" in  self.dict_color_to_label[color][0] or " -i" in self.dict_color_to_label[color][0]
+            class_index = self.voxels.register_new_voxel_color(color, invisible=i_tag)
             # NOTE: Typically you keep track of this class <-> index, we don't here because we randomly assign classes.
 
         # Indices of classes are integers \in [0,num_classes). 
-        random_classes = (torch.rand(len(all_voxel_indices)) * len(class_colors)).floor().int()
+        random_classes = (torch.rand(self.voxels.capacity()) * len(class_colors)).floor().int()
         
         # The color of each class was set during registration (when the protovoxel was created).
         # See the above NOTE for figuring out what index to pass for each class.
         self.show_voxels(all_voxel_indices, random_classes)
-
-    def __DEMO__show_preview(self):
-        """Previews the voxel space."""
-        _,world_dims,(gx,gy,gz)= self.get_domain_values()
-        preview_voxels : Voxels = Voxels(world_dims, (gx,gy,gz),voxel_prim_directory="/World/voxseg/preview")
-        preview_voxels.register_new_voxel_color((0,0,0))
-        preview_voxels.register_new_voxel_color((1,1,1))
-        shell_indices = preview_voxels.shell_indices()
-
-        checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
-
-        preview_voxels.create_voxels(shell_indices, checkerboard_classes)
 
     def __DEMO__load_custom_classes(self):
         custom_classes = {(0.8,0.5,0.2):["orange_color"],(0.2,0.9,0.2):["green_color","verde","multiple greens baby"],(0.9,0.1,0.1):["blank red --invisible"],(0.8,0.1,0.9):["purple_color"]}
