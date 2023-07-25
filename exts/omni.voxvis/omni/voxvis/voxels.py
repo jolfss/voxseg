@@ -195,9 +195,7 @@ class Voxels:
         sx, sy, sz = (self.W/(2*self.G))
         scaleOp.Set(value=(sx, sy, sz))
 
-
         cube.GetDisplayColorAttr().Set([(Gf.Vec3f(*color))])
-
 
         # Add new prototype to the prototype relations (PrototypesRel)
         self._voxel_instancer.GetPrototypesRel().AddTarget(prim_path)

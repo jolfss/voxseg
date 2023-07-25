@@ -24,20 +24,92 @@ from .client import VoxSegClient
 PAD = 10
 TXTPAD = ' '*int(PAD/5)
 
-DEFAULT_VOXEL_CENTER = (0., 0., 0.)
-DEFAULT_WORLD_DIMS =   (20.,20.,8.)
-DEFAULT_GRID_DIMS  =   (20, 20, 8)
+DEFAULT_VOXEL_CENTER = (0., 0., 0. ) # FOR NOW DEFAULTS 
+DEFAULT_GRID_DIMS  =   (20, 20, 5  )
+DEFAULT_WORLD_DIMS =   (40.,40.,10.)
 
 
 class MyExtension(omni.ext.IExt):
     """The extension object for voxvis."""
 
     voxels : Voxels = Voxels(DEFAULT_GRID_DIMS, DEFAULT_WORLD_DIMS)
+    "The object for manipulating voxels."
     preview_voxels : Voxels = Voxels(DEFAULT_GRID_DIMS, DEFAULT_WORLD_DIMS)
+    "The object for previewing the domain."
+    
+    #───────────────────────────────────────────────────────────────────────────╮
+    #   this block has buttons/functions that make voxels appear in the stage   │
+    #───────────────────────────────────────────────────────────────────────────╯
+    """
+    """
+    #CLIENT
+    def send_classes(self):
+        first_class_per_color_list = []
 
-    "The container object for voxel data."
-    "TODO"
-   
+        for color_class in self.dict_color_to_label.keys():
+            first_class_per_color_list.append(self.dict_color_to_label[color_class][0])
+
+        self.client.publish_class_names(first_class_per_color_list)
+
+    def request_computation(self):
+        indices = self.voxels.indices()
+        classes = self.client.request_voxel_computation()
+        self.show_voxels(indices, classes)
+    #END CLIENT
+    
+    def build_visualization_tools(self):
+        """TODO: Docs"""
+        with CollapsableFrame("Voxel Visualization"):
+            with VStack(height=0,spacing=PAD):
+                with VStack():
+                    Label(F"{TXTPAD}Total Occupied Voxels: <UNIMPLEMENTED>")
+                    Label(F"{TXTPAD}Number of Photos: <UNIMPLEMENTED>")
+                Button("--DEBUG load classes from dictionary", clicked_fn=self.__DEMO__load_custom_classes)
+                Button("--DEBUG randomize over current labels", clicked_fn=self.__DEMO__create_randomly_labeled_voxels)
+                Button("visualize occupancy")
+                Button("segment over labels", clicked_fn=self.request_computation)
+                Button("clear segments")
+                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle())
+
+    def show_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):
+        """Populates the world with all of the voxels specified, removing any that were there before.
+        Args:
+            voxel_indices (N,3): Each row is an ijk of a voxel to show. Duplicates are not forbidden but cause overlap.
+            voxel_classes (N,):  Each element is a class index [0...number of registered classes).
+        """
+        self.disable_domain_editing()
+        self.voxels.create_voxels(voxel_indices, voxel_classes)
+
+    def __DEMO__create_randomly_labeled_voxels(self):
+        # Create set of all indices in the voxel grid then reshape to (N,3)
+        all_voxel_indices = self.voxels.indices()
+
+        # Register a new voxel color per class.
+        class_colors = self.dict_color_to_label.keys()
+        for color in class_colors:
+            i_tag = "--invisible" in  self.dict_color_to_label[color][0] or " -i" in self.dict_color_to_label[color][0]
+            class_index = self.voxels.register_new_voxel_color(color, invisible=i_tag)
+            # NOTE: Typically you keep track of this class <-> index, we don't here because we randomly assign classes.
+
+        # Indices of classes are integers \in [0,num_classes). 
+        random_classes = (torch.rand(self.voxels.capacity()) * len(class_colors)).floor().int()
+        
+        # The color of each class was set during registration (when the protovoxel was created).
+        # See the above NOTE for figuring out what index to pass for each class.
+        self.show_voxels(all_voxel_indices, random_classes)
+
+    def __DEMO__load_custom_classes(self):
+        custom_classes = {(0.8,0.5,0.2):["orange_color"],(0.2,0.9,0.2):["green_color","verde","multiple greens baby"],(0.9,0.1,0.1):["blank red --invisible"],(0.8,0.1,0.9):["purple_color"]}
+        self.load_classes_from_dictionary(custom_classes)         
+
+    def visualize_occupancy_fn(self):
+        pass
+    
+    #──────────────────────────────────────────────────────────────────────────────────────╮
+    #   this block deals with creating all of the ui elements (first point of execution)   │
+    #──────────────────────────────────────────────────────────────────────────────────────╯
+    """
+    """
     def on_startup(self, ext_id):
         """TODO: Describe the order of initialization sensitivities. (what depends on what)"""
         print("[omni.voxvis] voxvis on_startup")
@@ -62,9 +134,9 @@ class MyExtension(omni.ext.IExt):
                     self.build_visualization_tools()
         return window
     
-    #----------------------------------------------------------------#
-    #   this block deals with specifying the domains of the voxels   #
-    #----------------------------------------------------------------#
+    #────────────────────────────────────────────────────────────────╮
+    #   this block deals with specifying the domains of the voxels   │
+    #────────────────────────────────────────────────────────────────╯
     """
     These widgets allow the user to define where they want their voxel grid to be before anything is done with voxels.
     However, this gets disabled after the self.voxels parameter is set because the location and size of the voxels
@@ -144,9 +216,9 @@ class MyExtension(omni.ext.IExt):
         self.multi_float_world_dims.enabled = False
         self.multi_int_grid_dims.enabled = False
         
-    #-------------------------------------------#
-    #   this block deals with defining labels   #
-    #-------------------------------------------#
+    #───────────────────────────────────────────╮
+    #   this block deals with defining labels   │
+    #───────────────────────────────────────────╯
     """
     The fundamental idea is that each color represents a class, so instead of making structure which groups labels
     under a particular class, simply group all labels by the color they were defined with.
@@ -158,7 +230,7 @@ class MyExtension(omni.ext.IExt):
     default_class_labels : str = ["not labeled --invisible"]
     "Represents the empty class."
 
-    default_class_color : Tuple[float,float,float] = (1/255,1/255,1/255) # People are way more likely to choose #000000
+    default_class_color : Tuple[float,float,float] = (5/255,2/255,1/255) # People are way more likely to choose #000000
     "This color is reserved for the non-label, attempts to use it will fail."
 
     dict_color_to_label : dict = {default_class_color : default_class_labels}
@@ -271,9 +343,9 @@ class MyExtension(omni.ext.IExt):
                 # NOTE: Preferable to button if there is a way to trigger on pressing enter, deselecting is annoying.
                 # AbstractValueModel.add_end_edit_fn(self.class_label_string_field.model, create_new_sublabel)
                 
-    #----------------------------------------------------------------#
-    #   this block lets the user see what labels have been defined   #
-    #----------------------------------------------------------------#
+    #────────────────────────────────────────────────────────────────╮
+    #   this block lets the user see what labels have been defined   │
+    #────────────────────────────────────────────────────────────────╯
     """
     Shows the user all of the current classes (and their labels) that they have defined so far, in order.
     The first label in each class is slightly bigger to denote that it is the principle label.
@@ -313,56 +385,3 @@ class MyExtension(omni.ext.IExt):
         class_colors = list(self.dict_color_to_label.keys())
         return class_colors
     
-    #-----------------------------------------------------------------#
-    #   this block has buttons that make voxels appear in the stage   #
-    #-----------------------------------------------------------------#
-    """
-    TODO
-    """
-    def build_visualization_tools(self):
-        """TODO: Docs"""
-        with CollapsableFrame("Voxel Visualization"):
-            with VStack(height=0,spacing=PAD):
-                with VStack():
-                    Label(F"{TXTPAD}Total Occupied Voxels: <UNIMPLEMENTED>")
-                    Label(F"{TXTPAD}Number of Photos: <UNIMPLEMENTED>")
-                Button("--DEBUG load classes from dictionary", clicked_fn=self.__DEMO__load_custom_classes)
-                Button("--DEBUG randomize over current labels", clicked_fn=self.__DEMO__create_randomly_labeled_voxels)
-                Button("visualize occupancy", clicked_fn=lambda : breakpoint())
-                Button("segment over labels")
-                Button("clear segments")
-                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle())
-
-    def show_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):
-        """Populates the world with all of the voxels specified, removing any that were there before.
-        Args:
-            voxel_indices (N,3): Each row is an ijk of a voxel to show. Duplicates are not forbidden but cause overlap.
-            voxel_classes (N,):  Each element is a class index [0...number of registered classes).
-        """
-        self.disable_domain_editing()
-        self.voxels.create_voxels(voxel_indices, voxel_classes)
-
-    def __DEMO__create_randomly_labeled_voxels(self):
-        # Create set of all indices in the voxel grid then reshape to (N,3)
-        all_voxel_indices = self.voxels.indices()
-
-        # Register a new voxel color per class.
-        class_colors = self.dict_color_to_label.keys()
-        for color in class_colors:
-            i_tag = "--invisible" in  self.dict_color_to_label[color][0] or " -i" in self.dict_color_to_label[color][0]
-            class_index = self.voxels.register_new_voxel_color(color, invisible=i_tag)
-            # NOTE: Typically you keep track of this class <-> index, we don't here because we randomly assign classes.
-
-        # Indices of classes are integers \in [0,num_classes). 
-        random_classes = (torch.rand(self.voxels.capacity()) * len(class_colors)).floor().int()
-        
-        # The color of each class was set during registration (when the protovoxel was created).
-        # See the above NOTE for figuring out what index to pass for each class.
-        self.show_voxels(all_voxel_indices, random_classes)
-
-    def __DEMO__load_custom_classes(self):
-        custom_classes = {(0.8,0.5,0.2):["orange_color"],(0.2,0.9,0.2):["green_color","verde","multiple greens baby"],(0.9,0.1,0.1):["blank red --invisible"],(0.8,0.1,0.9):["purple_color"]}
-        self.load_classes_from_dictionary(custom_classes)         
-
-    def visualize_occupancy_fn(self):
-        pass
