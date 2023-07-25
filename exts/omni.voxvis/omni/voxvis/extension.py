@@ -31,8 +31,8 @@ DEFAULT_GRID_DIMS  =   (100, 100, 40)
 class MyExtension(omni.ext.IExt):
     """The extension object for voxvis."""
 
-    voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
-    preview_voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
+    voxels : Voxels = Voxels(DEFAULT_GRID_DIMS, DEFAULT_WORLD_DIMS)
+    preview_voxels : Voxels = Voxels(DEFAULT_GRID_DIMS, DEFAULT_WORLD_DIMS)
 
     "The container object for voxel data."
     "TODO"
@@ -40,7 +40,7 @@ class MyExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
         """TODO: Describe the order of initialization sensitivities. (what depends on what)"""
         print("[omni.voxvis] voxvis on_startup")
-        self.voxels = Voxels(DEFAULT_WORLD_DIMS,DEFAULT_GRID_DIMS)
+        self.voxels = Voxels(DEFAULT_GRID_DIMS, DEFAULT_WORLD_DIMS)
 
         self.window = self.build_extension()                   
 
@@ -75,13 +75,14 @@ class MyExtension(omni.ext.IExt):
             with VStack(height=0,spacing=PAD):
                 with HStack():
                     Label(F"{TXTPAD}Voxel Center{TXTPAD}",width=Fraction(1))
-                    self.multi_float_voxel_center = MultiFloatDragField(*DEFAULT_VOXEL_CENTER,width=Fraction(3))                    
+                    self.multi_float_voxel_center = MultiFloatDragField(*DEFAULT_VOXEL_CENTER,width=Fraction(3))         
+                with HStack():
+                    Label(F"{TXTPAD}Grid Dims{TXTPAD}",width=Fraction(1))
+                    self.multi_int_grid_dims = MultiIntDragField(*DEFAULT_GRID_DIMS,min=2,width=Fraction(3))           
                 with HStack():
                     Label(F"{TXTPAD}World Dims{TXTPAD}",width=Fraction(1))
                     self.multi_float_world_dims = MultiFloatDragField(*DEFAULT_WORLD_DIMS,min=1,step=0.1,width=Fraction(3))
-                with HStack():
-                    Label(F"{TXTPAD}Grid Dims{TXTPAD}",width=Fraction(1))
-                    self.multi_int_grid_dims = MultiIntDragField(*DEFAULT_GRID_DIMS,min=2,width=Fraction(3))
+
 
         self.apply_preview_callbacks()
 
@@ -102,29 +103,30 @@ class MyExtension(omni.ext.IExt):
     def get_domain_values(self):
         """Returns (as values):
             (cx,cy,cz), (wx,wy,wz), (gx,gy,gz)"""
-        (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
+        (cx,cy,cz), (gx,gy,gz), (wx,wy,wz)  = self.get_domain_value_models()
 
         cx, cy, cz = cx.as_float, cy.as_float, cz.as_float
-        wx, wy, wz = wx.as_float, wy.as_float, wz.as_float
         gx, gy, gz = gx.as_int,   gy.as_int,   gz.as_int
+        wx, wy, wz = wx.as_float, wy.as_float, wz.as_float
 
-        return (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) 
+
+        return (cx,cy,cz), (gx,gy,gz), (wx,wy,wz)
 
     def apply_preview_callbacks(self):
         """Previews the voxel space."""
-        enable_preview_fn = lambda _: self.preview_voxels.toggle_global_visibility(True)
+        enable_preview_fn = lambda _: self.preview_voxels.toggle_visibility(True)
         def while_previewing_fn(dummy=None):
             _,world_dims,(gx,gy,gz)= self.get_domain_values()  
 
-            self.preview_voxels.resize_domain(world_dims, (gx,gy,gz))
+            self.preview_voxels.resize_domain((gx,gy,gz),world_dims)
 
             self.preview_voxels.register_new_voxel_color((0,0,0))
             self.preview_voxels.register_new_voxel_color((1,1,1))
             
-            shell_indices = self.preview_voxels.shell_indices() - 1 
+            shell_indices = self.preview_voxels.shell() - 1 
             checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
             self.preview_voxels.create_voxels(shell_indices, checkerboard_classes)
-        disable_preview_fn = lambda _ : self.preview_voxels.toggle_global_visibility(False)
+        disable_preview_fn = lambda _ : self.preview_voxels.toggle_visibility(False)
 
         (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
         for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
@@ -321,12 +323,11 @@ class MyExtension(omni.ext.IExt):
                     Label(F"{TXTPAD}Total Occupied Voxels: <UNIMPLEMENTED>")
                     Label(F"{TXTPAD}Number of Photos: <UNIMPLEMENTED>")
                 Button("--DEBUG load classes from dictionary", clicked_fn=self.__DEMO__load_custom_classes)
-                Button("--DEBUG show preview", clicked_fn=self.__DEMO__show_preview)
                 Button("--DEBUG randomize over current labels", clicked_fn=self.__DEMO__create_randomly_labeled_voxels)
                 Button("visualize occupancy", clicked_fn=lambda : breakpoint())
                 Button("segment over labels")
                 Button("clear segments")
-                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle_global_visibility())
+                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle_visibility())
 
     def show_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):
         """Populates the world with all of the voxels specified, removing any that were there before.
@@ -339,7 +340,7 @@ class MyExtension(omni.ext.IExt):
 
     def __DEMO__create_randomly_labeled_voxels(self):
         # Create set of all indices in the voxel grid then reshape to (N,3)
-        all_voxel_indices = self.voxels.all_indices()
+        all_voxel_indices = self.voxels.indices()
 
         # Register a new voxel color per class.
         class_colors = self.dict_color_to_label.keys()
@@ -355,18 +356,6 @@ class MyExtension(omni.ext.IExt):
         # The color of each class was set during registration (when the protovoxel was created).
         # See the above NOTE for figuring out what index to pass for each class.
         self.show_voxels(all_voxel_indices, random_classes)
-
-    def __DEMO__show_preview(self):
-        """Previews the voxel space."""
-        _,world_dims,(gx,gy,gz)= self.get_domain_values()
-        preview_voxels : Voxels = Voxels(world_dims, (gx,gy,gz),voxel_prim_directory="/World/voxvis/preview")
-        preview_voxels.register_new_voxel_color((0,0,0))
-        preview_voxels.register_new_voxel_color((1,1,1))
-        shell_indices = preview_voxels.shell_indices()
-
-        checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
-
-        preview_voxels.create_voxels(shell_indices, checkerboard_classes)
 
     def __DEMO__load_custom_classes(self):
         custom_classes = {(0.8,0.5,0.2):["orange_color"],(0.2,0.9,0.2):["green_color","verde","multiple greens baby"],(0.9,0.1,0.1):["blank red --invisible"],(0.8,0.1,0.9):["purple_color"]}

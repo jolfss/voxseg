@@ -10,138 +10,153 @@ from pxr import Gf, UsdGeom, Sdf, Vt, UsdShade
 import omni
 from omni import ui
 
-
-def get_stage():
-    return omni.usd.get_context().get_stage()
-
-# TODO: Use @property to deal with the managed variables in this class.
+#TODO: Use @property
 
 class Voxels:
-    """Class for Visualizing Voxel Data within Omniverse.
-    TODO: Fill out Docs."""
-    #---------------------#
-    #   class variables   #
-    #---------------------#
-    voxel_prim_directory : str
+    """Class for Visualizing Labeled Voxel Data within Omniverse. See docs for graphics.
+    
+    Params:
+        directory (str): Where the visualizations will be created on the usd stage.
+        center (float,float,float): The origin of the voxel space.
+        world_dims (float,float,float): The side lengths of the volume filled by voxels.
+            W (3,): ^^torch equivalent
+        grid_dims (int, int, int): How many cells are along each dimension.
+            G (3,): ^^torch equivalent
+        
+    Methods:
+        toggle_visibility()
+        capacity()
+
+    """
+
+    """
+    Because OOD (out-of-domain) data is rather common, and sometimes discarding it outright is unfavorable, this class 
+    is implemented to have a shell around the specified domain--OOD data gets projected onto these buffer voxels.
+
+    grid coordinates
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━(gx,gy,gz)
+    ┃ this is the shell                   ┃
+    ┃    ┏━━━━━━━━━━━━━━━━━━━━━(gx-1,gy-1,┃
+    ┃    ┃                         gz-1)  ┃
+    ┃    ┃    user defined domain    ┃    ┃
+    ┃    ┃                           ┃    ┃
+    ┃ (0,0,0)━━━━━━━━━━━━━━━━━━━━━━━━┛    ┃
+    ┃                                     ┃
+ (-1,-1,-1)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+    world coordinates:
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━(+1 voxel)
+    ┃                                     ┃
+    ┃    ┏━━━━━━━━━━━━━┳━━━━━━━(wx/2,wy/2,┃
+    ┃    ┃             ╹           wz/2)  ┃
+    ┃    ┣━━━━━━━━ (cx,cy,cz) ━━━━━━━┫    ┃         
+    ┃(-wx/2,           ╻             ┃    ┃
+    ┃-wy/2,-wz/2)━━━━━━┻━━━━━━━━━━━━━┛    ┃
+    ┃                                     ┃
+(-1 voxel)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"""
+
+    directory : str
     "The location of the voxel prims."
-
-    voxel_instancer : UsdGeom.PointInstancer
+    __voxel_instancer : UsdGeom.PointInstancer
     "The point instancer (UsdGeom.PointInstancer) responsible for instantiating voxels."
-
-    color_to_protoindex : Dict[Tuple[float,float,float],int] = {}
+    __color_to_protoindex : Dict[Tuple[float,float,float],int] = {}
     "Maps (r,g,b) -> protoindex"
-
-    voxel_prototypes : List[str] = []
+    __voxel_prototypes : List[str] = []
     "At each index (protoindex), the prim_path to the voxel prim corresponding to the protoindex."
-
-    is_visible : bool = True
+    __is_visible : bool = True
     "Whether or not this extension's primitives are visible in the stage."
 
-    #---------------------------#
-    #   voxel grid parameters   #
-    #---------------------------#
-    G:Tensor 
-    "(3,) The grid dimensions (how many voxels along each axis)."
-
-    grid_dims:Tuple[int,int,int]        
-    "(gx, gy, gz)   The grid dimensions."
-
+    # Center, World, Grid
     W:Tensor 
     "(3,) The world dimensions of the voxel space, not including the buffer shell."
-
-    world_dims:Tuple[float,float,float]
-    "(wx, wy, wz)   The world dimensions of the voxel space, not including the buffer shell."
-
+    G:Tensor 
+    "(3,) The grid dimensions (how many voxels along each axis)."
     _G_:Tensor 
     "(3,) The grid dimensions *including* the buffer shell (+2 each dimension). The underscores denote the buffer."
-
+    world_dims:Tuple[float,float,float]
+    "(wx, wy, wz)   The world dimensions of the voxel space, not including the buffer shell."
+    grid_dims:Tuple[int,int,int]        
+    "(gx, gy, gz)   The grid dimensions."
     _grid_dims_:Tuple[int,int,int]        
     "(gx+2,gy+2,gz+2)   The grid dimensions including the buffer shell."
 
+    # Indices and Centers
     _voxel_indices_ : Tensor
     "(gx,gy,gz,:) At each i,j,k, a tensor corresponding to that voxel index."
-
     _voxel_centers_ : Tensor
     "(gx,gy,gz,:) At each i,j,k, a tensor corresponding to the center in world space of voxel_ijk."
 
-    def __init__(self, world_dims, grid_dims, device='cpu', voxel_prim_directory="/World/voxels"):
+    def __init__(self, grid_dims, world_dims, device='cpu', directory="/World/voxels"):
         """TODO: Docs"""
-        self.grid_dims      = grid_dims
-        self._grid_dims_    = grid_dims[0]+2, grid_dims[1]+2, grid_dims[2]+2
-        self.world_dims     = world_dims
+        self.device = device
+        self.directory = directory
+        self.grid_dims   = grid_dims
+        self.world_dims  = world_dims
+        self.G = torch.tensor([grid_dims[0], grid_dims[1], grid_dims[2]], device=self.device)
+        self.W = torch.tensor([world_dims[0],world_dims[1],world_dims[2]], device=self.device)
 
-        self.device         = device
-        self.voxel_prim_directory = voxel_prim_directory
+        _G_ = self.G + 2 # _G_ is meant to denote the _buffer_ on each dimension.
 
-        G = self.G = torch.tensor([grid_dims[0], grid_dims[1], grid_dims[2]], device=self.device)
-        W = self.W = torch.tensor([world_dims[0],world_dims[1],world_dims[2]], device=self.device)
-
-        # Create buffer, a voxel shell capping each dimension. Underscores are intended to denote the boundary _GRID_.
-        _G_ = self._G_ = torch.tensor([G[0]+2, G[1]+2, G[2]+2], device=self.device) 
-        X   = torch.arange(_G_[0], device=self.device).view(-1, 1, 1).expand(-1,    _G_[1],_G_[2])
-        Y   = torch.arange(_G_[1], device=self.device).view(1, -1, 1).expand(_G_[0],-1,    _G_[2])
-        Z   = torch.arange(_G_[2], device=self.device).view(1, 1, -1).expand(_G_[0],_G_[1],-1    )
+        X = torch.arange(_G_[0], device=self.device).view(-1, 1, 1).expand( -1, _G_[1],_G_[2])
+        Y = torch.arange(_G_[1], device=self.device).view( 1,-1, 1).expand(_G_[0], -1, _G_[2])
+        Z = torch.arange(_G_[2], device=self.device).view( 1, 1,-1).expand(_G_[0],_G_[1], -1 )
 
         # Shifts everything down one in all dimensions to make the buffer.
         self._voxel_indices_ = torch.stack((X,Y,Z), dim=-1) - 1 
-        self._voxel_centers_ = (1/G * (self._voxel_indices_ - (G-1)/2)) * W
-        self._voxel_prims_   = {}
-        self.num_voxels      = _G_[0]*_G_[1]*_G_[2]
+        self._voxel_centers_ = (1/_G_ * (self._voxel_indices_ - (_G_-1)/2)) * self.W
+        self.num_voxels      = self.capacity()
 
-    def resize_domain(self, world_dims : Tuple[float,float,float], grid_dims:Tuple[int,int,int]):
-        self.color_to_protoindex.clear()
-        self.voxel_prototypes = []
+    def resize_domain(self, grid_dims:Tuple[int,int,int], world_dims : Tuple[float,float,float]):
+        self.__color_to_protoindex.clear()
+        self.__voxel_prototypes = []
 
         # Initialize like normal--------------------
-        self.grid_dims      = grid_dims
-        self._grid_dims_    = grid_dims[0]+2, grid_dims[1]+2, grid_dims[2]+2
-        self.world_dims     = world_dims
+        self.grid_dims   = grid_dims
+        self.world_dims  = world_dims
+        self.G = torch.tensor([grid_dims[0], grid_dims[1], grid_dims[2]], device=self.device)
+        self.W = torch.tensor([world_dims[0],world_dims[1],world_dims[2]], device=self.device)
 
-        G = self.G = torch.tensor([grid_dims[0], grid_dims[1], grid_dims[2]], device=self.device)
-        W = self.W = torch.tensor([world_dims[0],world_dims[1],world_dims[2]], device=self.device)
+        _G_ = self.G + 2 # _G_ is meant to denote the _buffer_ on each dimension.
 
-        # Create buffer, a voxel shell capping each dimension. Underscores are intended to denote the boundary _GRID_.
-        _G_ = self._G_ = torch.tensor([G[0]+2, G[1]+2, G[2]+2], device=self.device) 
-        X   = torch.arange(_G_[0], device=self.device).view(-1, 1, 1).expand(-1,    _G_[1],_G_[2])
-        Y   = torch.arange(_G_[1], device=self.device).view(1, -1, 1).expand(_G_[0],-1,    _G_[2])
-        Z   = torch.arange(_G_[2], device=self.device).view(1, 1, -1).expand(_G_[0],_G_[1],-1    )
+        X = torch.arange(_G_[0], device=self.device).view(-1, 1, 1).expand( -1, _G_[1],_G_[2])
+        Y = torch.arange(_G_[1], device=self.device).view( 1,-1, 1).expand(_G_[0], -1, _G_[2])
+        Z = torch.arange(_G_[2], device=self.device).view( 1, 1,-1).expand(_G_[0],_G_[1], -1 )
 
         # Shifts everything down one in all dimensions to make the buffer.
         self._voxel_indices_ = torch.stack((X,Y,Z), dim=-1) - 1 
-        self._voxel_centers_ = (1/G * (self._voxel_indices_ - (G-1)/2)) * W
-        self._voxel_prims_   = {}
-        self.num_voxels      = _G_[0]*_G_[1]*_G_[2]
+        self._voxel_centers_ = (1/_G_ * (self._voxel_indices_ - (_G_-1)/2)) * self.W
+        self.num_voxels      = self.capacity()
         #-------------------------------------------
-
-    
-    def toggle_global_visibility(self, set_visibility_setting: Optional[bool]=None):
-        """Toggles or sets global visibility for *all* voxels in the stage.
-        Args:
-            set_visibility_setting (bool option): If None, toggles visibility, otherwise sets the visibility."""
-        self.is_visible = (not self.is_visible) if set_visibility_setting is None else\
-                          (set_visibility_setting)
-
-        imageable = UsdGeom.Imageable(self.voxel_instancer)
-
-        if self.is_visible:
-            imageable.MakeVisible()
-            self.is_visible = True
-        else:
-            imageable.MakeInvisible()
-            self.is_visible = False
 
     def capacity(self, include_buffer=False) -> int:
         "Number of total possible voxels in the voxel grid."
         roving_product = 1
-        for dim in (self.grid_dims if include_buffer else self._grid_dims_):
-            roving_product *= dim
+        for dim in self.grid_dims:
+            roving_product *= dim + 0 if not include_buffer else 2
         return roving_product
+    
+    def toggle_visibility(self, set_visibility_setting: Optional[bool]=None):
+        """Toggles or sets global visibility for *all* voxels in the stage.
+        Args:
+            set_visibility_setting (bool option): If None, toggles visibility, otherwise sets the visibility."""
+        self.__is_visible = (not self.__is_visible) if set_visibility_setting is None else\
+                          (set_visibility_setting)
+
+        imageable = UsdGeom.Imageable(self.__voxel_instancer)
+
+        if self.__is_visible:
+            imageable.MakeVisible()
+            self.__is_visible = True
+        else:
+            imageable.MakeInvisible()
+            self.__is_visible = False
 
     def initialize_instancer(self):
         """TODO: Docs"""
-        omni.usd.get_context().get_stage().RemovePrim(F"{self.voxel_prim_directory}/voxel_instancer")
-        voxel_instancer_prim_path = F"{self.voxel_prim_directory}/voxel_instancer"
-        self.voxel_instancer = UsdGeom.PointInstancer.Define(get_stage(), voxel_instancer_prim_path)
+        omni.usd.get_context().get_stage().RemovePrim(F"{self.directory}/voxel_instancer")
+        voxel_instancer_prim_path = F"{self.directory}/voxel_instancer"
+        stage = omni.usd.get_context().get_stage()
+        self.__voxel_instancer = UsdGeom.PointInstancer.Define(stage, voxel_instancer_prim_path)
 
     def register_new_voxel_color(self, color : Tuple[float,float,float], invisible=False) -> int:
         """The protoindex of the voxel with the specified color.
@@ -158,14 +173,14 @@ class Voxels:
             self.initialize_instancer()  
 
         # If already registered just return the existing version.
-        if color in self.color_to_protoindex.keys():
-            return self.color_to_protoindex[color]
+        if color in self.__color_to_protoindex.keys():
+            return self.__color_to_protoindex[color]
         
         stage = omni.usd.get_context().get_stage()
        
         # Create a new cube prim
         prim_name = F"voxel_{int(255*color[0])}_{int(255*color[1])}_{int(255*color[2])}" # TODO: Use class name?
-        prim_path = F"{self.voxel_prim_directory}/prototypes/voxel_{prim_name}"
+        prim_path = F"{self.directory}/prototypes/voxel_{prim_name}"
         cube = UsdGeom.Cube.Define(stage, prim_path)
 
         # Scale to the correct voxel dimensions
@@ -195,12 +210,12 @@ class Voxels:
         # TODO: Material/Opacity
 
         # Add new prototype to the prototype relations (PrototypesRel)
-        self.voxel_instancer.GetPrototypesRel().AddTarget(prim_path)
+        self.__voxel_instancer.GetPrototypesRel().AddTarget(prim_path)
 
         # Update backend
-        new_index = len(self.color_to_protoindex.keys())
-        self.color_to_protoindex.update({color : new_index})
-        self.voxel_prototypes.append(prim_path)
+        new_index = len(self.__color_to_protoindex.keys())
+        self.__color_to_protoindex.update({color : new_index})
+        self.__voxel_prototypes.append(prim_path)
 
         # TODO: Figure out how to hide the prototype but not the instances.
 
@@ -215,7 +230,7 @@ class Voxels:
             voxel_indices (N,3): Stack of voxel indices of voxel to get the center of.
         Requires:
             Forall n, voxel_indices[n,:] \in [-1...G] inclusive (per dimension of G)"""
-        voxel_indices += 1
+        voxel_indices
         return self._voxel_centers_[voxel_indices[:, 0], voxel_indices[:, 1], voxel_indices[:, 2], :]
 
     def create_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):  
@@ -230,122 +245,34 @@ class Voxels:
         voxel_indices += 1
     
         voxel_centers = Vt.Vec3fArray.FromNumpy(self.get_voxel_centers(voxel_indices).cpu().numpy())
-        self.voxel_instancer.CreatePositionsAttr(voxel_centers)
-        self.voxel_instancer.CreateProtoIndicesAttr().Set(Vt.IntArray.FromNumpy(voxel_classes.cpu().numpy()))  
+        self.__voxel_instancer.CreatePositionsAttr(voxel_centers)
+        self.__voxel_instancer.CreateProtoIndicesAttr().Set(Vt.IntArray.FromNumpy(voxel_classes.cpu().numpy()))  
 
-    def all_indices(self):
+    def indices(self, include_shell:Optional[bool]=False):
+        G = self.G
+        X   = torch.arange(G[0], device=self.device).view(-1, 1, 1).expand( -1, G[1],G[2])
+        Y   = torch.arange(G[1], device=self.device).view( 1,-1, 1).expand(G[0], -1, G[2])
+        Z   = torch.arange(G[2], device=self.device).view( 1, 1,-1).expand(G[0],G[1], -1 )
+        return torch.stack((X,Y,Z), dim=-1) 
+
+    def shell(self):
         """TODO: Docs"""
         gx,gy,gz = self.grid_dims
-        GX, GY, GZ = torch.arange(gx),torch.arange(gy),torch.arange(gz)
-        GXE, GYE, GZE = GX.expand(gz,gy,-1), GY.expand(gx,gz,-1), GZ.expand(gx,gy,-1)
-        GXEP, GYEP = GXE.permute(2,1,0), GYE.permute(0,2,1)
-        all_voxel_indices = torch.stack((GXEP,GYEP,GZE),dim=3).view(-1,3)
-        return all_voxel_indices
-
-    def shell_indices(self):
-        """TODO: Docs"""
-        gx,gy,gz = self.grid_dims
+        gx,gy,gz = gx+2,gy+2,gz+2
 
         indices = []
 
-        #z=[0,gz-1]
         for x in [0,gx-1]:
             for y in range(gy):
                 for z in range(gz):
                     indices.append([x,y,z])
-        #z=[0,gz-1]
         for y in [0,gy-1]:
             for x in range(gx-2):
                 for z in range(gz):
                     indices.append([x+1,y,z])
-        #z=[0,gz-1]
         for z in [0,gz-1]:
             for x in range(gx-2):
                 for y in range(gy-2):
                     indices.append([x+1,y+1,z])
 
-        return Tensor(indices).long()
-
-def __DEPRECATED__create_mesh_voxel_prototype(self):
-    """Creates the prototype voxel for the instancer."""
-    """ 2---4                    5-------4      
-        | \ |                   /|      /|      Triangle Faces (12)
-    2---3---5---4---2          7-|-----6 |      342 354 375 307 310 321
-    | \ | / | \ | / |   -->    | 3-----|-2      764 745 701 716 146 124
-    1---0---7---6---1          |/      |/       
-        | \ |                  0-------1        NOTE: These faces have outwards normal.
-        1---6"""  
-    unit_box = torch.tensor([(-1,-1,-1),(1,-1,-1),(1,1,-1),
-                                (-1,1,-1),(1,1,1),(-1,1,1),(1,-1,1),(-1,-1,1)],device=self.device)
-
-    vertices = (unit_box * self.W) / (2 * self.G) #(8,3)
-
-    vec3f_list = []
-    for vertex in vertices:
-        vec3f_list.append(Gf.Vec3f(float(vertex[0]), float(vertex[1]), float(vertex[2])))
-
-    mesh = UsdGeom.Mesh.Define(omni.usd.get_context().get_stage())
-    mesh.CreatePointsAttr(vec3f_list)
-    mesh.CreateFaceVertexCountsAttr(12*[3]) # 12 tris per cube, 3 vertices each
-    mesh.CreateFaceVertexIndicesAttr([3,4,2,  3,5,4,  3,7,5,  3,0,7,  3,1,0,  3,2,1,
-                                        7,6,4,  7,4,5,  7,0,1,  7,1,6,  1,4,6,  1,2,4])
-    
-#NOTE: May be soon deprecated if I find a way to make an instancer.
-def __DEPRECATED__create_voxel_prims(self, voxel_indices : Tensor):  
-    """Creates the voxel for the i,j,k-th voxel in the stage, or does nothing if it already exists.
-    Args:
-        voxel_indices (N,3): Stack of row vectors [i,j,k] denoting which voxels to create."""
-
-    def vertices_to_vec3f(vertices_tensor : Tensor) -> List[List[Gf.Vec3f]]:
-        """Converts a tensor of vertices (N,8,3) in a torch tensor to a Gf.Vec3f list list."""
-        (N,_,__) = vertices_tensor.size()
-        gf_vec3f_list_list = []
-        for n in range(N):
-            gf_vec3f_list = []
-            for v in range(8):
-                gf_vec3f_list.append(Gf.Vec3f(float(vertices_tensor[n,v,0].item()),
-                                                float(vertices_tensor[n,v,1].item()),
-                                                float(vertices_tensor[n,v,2].item())))
-            gf_vec3f_list_list.append(gf_vec3f_list)
-        return gf_vec3f_list_list
-    
-    def vertices_from_centers(centers : Tensor) -> Tensor: 
-        """Is the (N,8,3) tensor containing the vertices for the center, satisfying the below convention.
-        Args:
-            centers (N,3): Each row is the world coordinate [wx,wy,wz] which is at the center of the cube."""
-        """ 2---4                    5-------4      
-            | \ |                   /|      /|      Triangle Faces (12)
-        2---3---5---4---2          7-|-----6 |      342 354 375 307 310 321
-        | \ | / | \ | / |   -->    | 3-----|-2      764 745 701 716 146 124
-        1---0---7---6---1          |/      |/       
-            | \ |                  0-------1        NOTE: These faces have outwards normal.
-            1---6"""  
-        unit_box = torch.tensor([(-1,-1,-1),(1,-1,-1),(1,1,-1),
-                                    (-1,1,-1),(1,1,1),(-1,1,1),(1,-1,1),(-1,-1,1)],device=self.device)
-        
-        unit_box = unit_box.view(8, 1, 3)
-        
-        centers = centers.view(1, -1, 3)
-        
-        vertices = (unit_box * self.W) / (2 * self.G) + centers
-        
-        # Reshape to (N, 8, 3) for convenience
-        vertices = vertices.transpose(0, 1)
-        return vertices
-    
-    voxel_indices += 1
-    (N,_) = voxel_indices.size()
-
-    gf_vec3f_list_list = vertices_to_vec3f(vertices_from_centers(self.get_voxel_centers(voxel_indices)))
-
-    for n in range(N):
-        voxel_prim_path = \
-        F"{self.voxel_prim_directory}/voxel_{voxel_indices[n][0]}_{voxel_indices[n][1]}_{voxel_indices[n][2]}"
-
-        self._voxel_prims_[voxel_indices[n]] = voxel_prim_path   
-
-        mesh = UsdGeom.Mesh.Define(omni.usd.get_context().get_stage(), voxel_prim_path)
-        mesh.CreatePointsAttr(gf_vec3f_list_list[n])
-        mesh.CreateFaceVertexCountsAttr(12*[3]) # 12 tris per cube, 3 vertices each
-        mesh.CreateFaceVertexIndicesAttr([3,4,2,  3,5,4,  3,7,5,  3,0,7,  3,1,0,  3,2,1,
-                                        7,6,4,  7,4,5,  7,0,1,  7,1,6,  1,4,6,  1,2,4,])
+        return (Tensor(indices)-1).long()
