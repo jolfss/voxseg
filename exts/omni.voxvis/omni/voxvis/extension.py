@@ -126,8 +126,6 @@ class MyExtension(omni.ext.IExt):
             
             shell_indices = self.preview_voxels.indices_shell()
             checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
-            #shell_indices = self.preview_voxels.indices().view(-1,3)
-            #checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
             self.preview_voxels.create_voxels(shell_indices, checkerboard_classes)
 
         disable_preview_fn = lambda _ : self.preview_voxels.toggle(False)

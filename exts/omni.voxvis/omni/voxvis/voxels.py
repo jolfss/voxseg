@@ -105,7 +105,7 @@ class Voxels:
         """The world-coordinate centers of all voxels in [indices]. Does *NOT* need to be in the span of the voxel grid
         Args:
             indices (*,3): Any size with last component (,3) representing ijk indices for the voxel."""
-        if indices.type() != torch.LongTensor:
+        if indices.type() != 'torch.LongTensor':
             print("[voxvis] Warning: Centers was passed non-long-typed indices, may not be aligned with true centers.")
         return (1/(self.G) * (indices - (self.G-1)/2)) * self.W
     
