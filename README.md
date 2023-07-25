@@ -18,7 +18,7 @@ This project is a template for developing extensions for *Omniverse Kit*.
 
 ![Extension Manager Window](/images/add-ext-search-path.png)
 
-5. Now you can find `omni.voxseg` extension in the top left search bar. Select and enable it.
+5. Now you can find `omni.voxvis` extension in the top left search bar. Select and enable it.
 6. "My Window" window will pop up. *Extension Manager* watches for any file changes. You can try changing some code in this extension and see them applied immediately with a hotreload.
 
 ### Few tips
@@ -26,7 +26,7 @@ This project is a template for developing extensions for *Omniverse Kit*.
 * Now that `exts` folder was added to the search you can add new extensions to this folder and they will be automatically found by the *App*.
 * Look at the *Console* window for warnings and errors. It also has a small button to open current log file.
 * All the same commands work on linux. Replace `.bat` with `.sh` and `\` with `/`.
-* Extension name is a folder name in `exts` folder, in this example: `omni.voxseg`. 
+* Extension name is a folder name in `exts` folder, in this example: `omni.voxvis`. 
 * Most important thing extension has is a config file: `extension.toml`, take a peek.
 
 ## Next Steps: Alternative way to add a new extension
@@ -39,7 +39,7 @@ To get a better understanding and learn a few other things, we recommend followi
 3. Run this app with `exts` folder added as an extensions search path and new extension enabled:
 
 ```bash
-> app\omni.code.bat --ext-folder exts --enable omni.voxseg
+> app\omni.code.bat --ext-folder exts --enable omni.voxvis
 ```
 
 - `--ext-folder [path]` - adds new folder to the search path
@@ -61,14 +61,14 @@ Think of it as `python.exe`. It is a small runtime, that enables all the basics,
 
 
 ```bash
-> app\kit\kit.exe --ext-folder exts --enable omni.voxseg
+> app\kit\kit.exe --ext-folder exts --enable omni.voxvis
 ```
 
 It starts much faster and will only have extensions enabled that are required for this new extension (look at  `[dependencies]` section of `extension.toml`). You can enable more extensions: try adding `--enable omni.kit.window.extensions` to have extensions window enabled (yes, extension window is an extension too!):
 
 
 ```bash
-> app\kit\kit.exe --ext-folder exts --enable omni.voxseg --enable omni.kit.window.extensions
+> app\kit\kit.exe --ext-folder exts --enable omni.voxvis --enable omni.kit.window.extensions
 ```
 
 You should see a menu in the top left. From here you can enable more extensions from the UI. 
@@ -82,7 +82,7 @@ You should see a menu in the top left. From here you can enable more extensions 
 
 To run tests we run a new process where only the tested extension (and it's dependencies) is enabled. Like in example above + testing system (`omni.kit.test` extension). There are 2 ways to run extension tests:
 
-1. Run: `app\kit\test_ext.bat omni.voxseg  --ext-folder exts`
+1. Run: `app\kit\test_ext.bat omni.voxvis  --ext-folder exts`
 
 That will run a test process with all tests and exit. For development mode pass `--dev`: that will open test selection window. As everywhere, hotreload also works in this mode, give it a try by changing some code!
 
@@ -119,8 +119,8 @@ You can also just pass a path to create link to:
 
 Adding a new extension is as simple as copying and renaming existing one:
 
-1. copy `exts/omni.voxseg` to `exts/[new extension name]`
-2. rename python module (namespace) in `exts/[new extension name]/omni/voxseg` to `exts/[new extension name]/[new python module]`
+1. copy `exts/omni.voxvis` to `exts/[new extension name]`
+2. rename python module (namespace) in `exts/[new extension name]/omni/voxvis` to `exts/[new extension name]/[new python module]`
 3. update `exts/[new extension name]/config/extension.toml`, most importantly specify new python module to load:
 
 ```toml

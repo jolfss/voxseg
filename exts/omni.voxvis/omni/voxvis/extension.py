@@ -29,7 +29,7 @@ DEFAULT_GRID_DIMS  =   (100, 100, 40)
 
 
 class MyExtension(omni.ext.IExt):
-    """The extension object for VoxSeg."""
+    """The extension object for voxvis."""
 
     voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
     preview_voxels : Voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS)
@@ -39,18 +39,18 @@ class MyExtension(omni.ext.IExt):
    
     def on_startup(self, ext_id):
         """TODO: Describe the order of initialization sensitivities. (what depends on what)"""
-        print("[omni.voxseg] VoxSeg on_startup")
+        print("[omni.voxvis] voxvis on_startup")
         self.voxels = Voxels(DEFAULT_WORLD_DIMS,DEFAULT_GRID_DIMS)
 
         self.window = self.build_extension()                   
 
     def on_shutdown(self):
         """TODO: """
-        print("[omni.voxseg] VoxSeg on_shutdown")
+        print("[omni.voxvis] voxvis on_shutdown")
 
     def build_extension(self) -> Window:
-        """Builds the ui elements of the Voxseg Extension."""
-        window = Window("Voxseg", width=450, height=700, padding_x=PAD, padding_y=PAD)
+        """Builds the ui elements of the voxvis Extension."""
+        window = Window("voxvis", width=450, height=700, padding_x=PAD, padding_y=PAD)
         with window.frame:
             with ScrollingFrame():
                 with VStack(height=0.0,spacing=PAD):
@@ -70,8 +70,8 @@ class MyExtension(omni.ext.IExt):
     """
 
     def build_domain_editor(self):
-        """Creates the widget which will set voxseg parameters."""
-        with CollapsableFrame("Voxseg Parameters"):
+        """Creates the widget which will set voxvis parameters."""
+        with CollapsableFrame("voxvis Parameters"):
             with VStack(height=0,spacing=PAD):
                 with HStack():
                     Label(F"{TXTPAD}Voxel Center{TXTPAD}",width=Fraction(1))
@@ -199,7 +199,7 @@ class MyExtension(omni.ext.IExt):
 
         # make random colors until one is not in the current list of colors
         while (r,g,b) in self.dict_color_to_label.keys():
-            print("[voxseg] Warning: A class tried to use a color which was already reserved, assigning a new color.")
+            print("[voxvis] Warning: A class tried to use a color which was already reserved, assigning a new color.")
             r,g,b = np.random.rand(3)
 
         # removes all colors with no sublabels, NOTE: Not the best way to do this but usually there are few colors
@@ -231,12 +231,12 @@ class MyExtension(omni.ext.IExt):
             return
         
         if (r,g,b) == self.default_class_color:
-            print(F"[voxseg] Warning: The color {self.default_class_color} is permanently reserved. Randomizing.")
+            print(F"[voxvis] Warning: The color {self.default_class_color} is permanently reserved. Randomizing.")
             self.create_new_class()
             return
         
         if label in self.dict_label_to_color.keys(): 
-            print(F"[voxseg] Warning: Label {label} is already reserved.")
+            print(F"[voxvis] Warning: Label {label} is already reserved.")
             return
 
         if not (r,g,b) in self.dict_color_to_label.keys(): # handle case where label is added before class
@@ -359,7 +359,7 @@ class MyExtension(omni.ext.IExt):
     def __DEMO__show_preview(self):
         """Previews the voxel space."""
         _,world_dims,(gx,gy,gz)= self.get_domain_values()
-        preview_voxels : Voxels = Voxels(world_dims, (gx,gy,gz),voxel_prim_directory="/World/voxseg/preview")
+        preview_voxels : Voxels = Voxels(world_dims, (gx,gy,gz),voxel_prim_directory="/World/voxvis/preview")
         preview_voxels.register_new_voxel_color((0,0,0))
         preview_voxels.register_new_voxel_color((1,1,1))
         shell_indices = preview_voxels.shell_indices()
