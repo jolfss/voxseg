@@ -25,7 +25,7 @@ TXTPAD = ' '*int(PAD/5)
 
 DEFAULT_VOXEL_CENTER = (0., 0., 0.)
 DEFAULT_WORLD_DIMS =   (20.,20.,8.)
-DEFAULT_GRID_DIMS  =   (100, 100, 40)
+DEFAULT_GRID_DIMS  =   (20, 20, 8)
 
 
 class MyExtension(omni.ext.IExt):
@@ -88,21 +88,21 @@ class MyExtension(omni.ext.IExt):
 
     def get_domain_value_models(self):
         """Returns (as value models):
-            (cx,cy,cz), (wx,wy,wz), (gx,gy,gz)"""
+            (cx,cy,cz), (gx,gy,gz), (wx,wy,wz),"""
         model = self.multi_float_voxel_center.model
         voxel_center=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
-
-        model = self.multi_float_world_dims.model
-        world_dims=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
 
         model = self.multi_int_grid_dims.model
         grid_dims=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
 
-        return tuple(voxel_center), tuple(world_dims), tuple(grid_dims)
+        model = self.multi_float_world_dims.model
+        world_dims=[(model.get_item_value_model(child)) for child in model.get_item_children()[:3]]
+
+        return tuple(voxel_center), tuple(grid_dims), tuple(world_dims)
 
     def get_domain_values(self):
         """Returns (as values):
-            (cx,cy,cz), (wx,wy,wz), (gx,gy,gz)"""
+            (cx,cy,cz), (gx,gy,gz), (wx,wy,wz)"""
         (cx,cy,cz), (gx,gy,gz), (wx,wy,wz)  = self.get_domain_value_models()
 
         cx, cy, cz = cx.as_float, cy.as_float, cz.as_float
@@ -114,22 +114,26 @@ class MyExtension(omni.ext.IExt):
 
     def apply_preview_callbacks(self):
         """Previews the voxel space."""
-        enable_preview_fn = lambda _: self.preview_voxels.toggle_visibility(True)
-        def while_previewing_fn(dummy=None):
-            _,world_dims,(gx,gy,gz)= self.get_domain_values()  
+        enable_preview_fn = lambda _: self.preview_voxels.toggle(True)
 
-            self.preview_voxels.resize_domain((gx,gy,gz),world_dims)
+        def while_previewing_fn(dummy=None):
+            _,(gx,gy,gz),world_dims= self.get_domain_values()  
+
+            self.preview_voxels.redomain((gx,gy,gz),world_dims)
 
             self.preview_voxels.register_new_voxel_color((0,0,0))
             self.preview_voxels.register_new_voxel_color((1,1,1))
             
-            shell_indices = self.preview_voxels.shell() - 1 
+            shell_indices = self.preview_voxels.indices_shell()
             checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
+            #shell_indices = self.preview_voxels.indices().view(-1,3)
+            #checkerboard_classes = (shell_indices[:,0] + shell_indices[:,1] + shell_indices[:,2]) % 2
             self.preview_voxels.create_voxels(shell_indices, checkerboard_classes)
-        disable_preview_fn = lambda _ : self.preview_voxels.toggle_visibility(False)
 
-        (cx,cy,cz), (wx,wy,wz), (gx,gy,gz) = self.get_domain_value_models()
-        for model in [cx,cy,cz,wx,wy,wz,gx,gy,gz]:
+        disable_preview_fn = lambda _ : self.preview_voxels.toggle(False)
+
+        (cx,cy,cz), (gx,gy,gz), (wx,wy,wz) = self.get_domain_value_models()
+        for model in [cx,cy,cz,gx,gy,gz,wx,wy,wz]:
             model.add_begin_edit_fn(enable_preview_fn)
             model.add_value_changed_fn(while_previewing_fn)
             model.add_end_edit_fn(disable_preview_fn)
@@ -327,7 +331,7 @@ class MyExtension(omni.ext.IExt):
                 Button("visualize occupancy", clicked_fn=lambda : breakpoint())
                 Button("segment over labels")
                 Button("clear segments")
-                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle_visibility())
+                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle())
 
     def show_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):
         """Populates the world with all of the voxels specified, removing any that were there before.
@@ -345,13 +349,12 @@ class MyExtension(omni.ext.IExt):
         # Register a new voxel color per class.
         class_colors = self.dict_color_to_label.keys()
         for color in class_colors:
-            has_invisibility_tag = \
-                "--invisible" in  self.dict_color_to_label[color][0] or " -i" in self.dict_color_to_label[color][0]
-            class_index = self.voxels.register_new_voxel_color(color, invisible=has_invisibility_tag)
+            i_tag = "--invisible" in  self.dict_color_to_label[color][0] or " -i" in self.dict_color_to_label[color][0]
+            class_index = self.voxels.register_new_voxel_color(color, invisible=i_tag)
             # NOTE: Typically you keep track of this class <-> index, we don't here because we randomly assign classes.
 
         # Indices of classes are integers \in [0,num_classes). 
-        random_classes = (torch.rand(len(all_voxel_indices)) * len(class_colors)).floor().int()
+        random_classes = (torch.rand(self.voxels.capacity()) * len(class_colors)).floor().int()
         
         # The color of each class was set during registration (when the protovoxel was created).
         # See the above NOTE for figuring out what index to pass for each class.
