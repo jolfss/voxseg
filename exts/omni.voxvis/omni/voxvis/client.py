@@ -12,6 +12,7 @@ sys.path.append(f'{CATKIN_PATH}/devel/lib/python3/dist-packages/voxseg/msg')
 from _DepthImageInfo import DepthImageInfo
 from _Classes import Classes
 from _VoxelGrid import VoxelGrid
+from _WorldInfo import WorldInfo
 
 sys.path.append(f'{CATKIN_PATH}/devel/lib/python3/dist-packages/voxseg/srv')
 
@@ -20,9 +21,10 @@ from _VoxelComputation import VoxelComputation
 #from voxseg.srv import VoxelComputation
 
 import numpy as np
+import torch
 from typing import List, Dict, Union
 
-from .config import CLIENT_NODE, CLASS_TOPIC, IMAGE_TOPIC, VOXEL_TOPIC, VOXEL_REQUEST_SERVICE
+from .config import CLIENT_NODE, CLASS_TOPIC, VOXEL_TOPIC, WORLD_DIM_TOPIC, VOXEL_REQUEST_SERVICE
 from .utils import voxels_from_msg, convert_dict_to_dictionary_array
 
 class VoxSegClient:
@@ -31,13 +33,21 @@ class VoxSegClient:
         initialize the frontend node
         """
 
-        rospy.init_node(CLIENT_NODE, anonymous=True)
+        #rospy.init_node(CLIENT_NODE, anonymous=True)
 
         # Important: initialize the pubs before starting to publish
         self.class_pub = rospy.Publisher(CLASS_TOPIC, Classes, queue_size=10)
-        self.image_pub = rospy.Publisher(IMAGE_TOPIC, DepthImageInfo, queue_size=10)
         self.voxel_pub = rospy.Publisher(VOXEL_TOPIC, VoxelGrid, queue_size=10)
+        self.dim_pub = rospy.Publisher(WORLD_DIM_TOPIC, WorldInfo, queue_size=10)
         
+    def publish_world_info(self, world_dim, grid_dim):
+        """
+        Inputs:
+            world_dim: arraylike, shape (3,), represents the xyz dimensions of the ground truth world
+            grid_dim: arraylike containing ints, shape (3,), represents the xyz dimensions of the voxel grid
+        """
+        msg = WorldInfo(world_dim=list(world_dim), grid_dim=list(grid_dim))
+        self.dim_pub.publish(msg)
 
     def publish_depth_image(self, image, depth_map, extrinsics):
         """
@@ -100,7 +110,6 @@ class VoxSegClient:
 
 
         self.class_pub.publish(class_msg)
-
     def request_voxel_computation(self, min_pts_in_voxel=0):
         """
         Publishes the VoxelGrid message returned by the request to VOXEL_TOPIC
@@ -111,16 +120,18 @@ class VoxSegClient:
         Returns:
             torch.tensor representing the voxels and torch.tensor representing the world dim
         """
+        print('Requesting Voxels')
         rospy.wait_for_service(VOXEL_REQUEST_SERVICE)
         try:
             compute_data_service = rospy.ServiceProxy(VOXEL_REQUEST_SERVICE, VoxelComputation)
             voxel_response = compute_data_service(min_pts_in_voxel)
-            voxel_msg = voxel_response.voxels
-            self.voxel_pub.publish(voxel_msg)
-
-            voxels, world_dim= voxels_from_msg(voxel_msg)
-            return voxels, world_dim
+            voxels = torch.as_tensor(voxel_response.data)
+            print('VOXELS RECEIVED')
+            print(voxels.max())
+            print(voxels.min())
+            return voxels
         except rospy.ServiceException as e:
+            print('Service Call Failed')
             rospy.logerr("Service call failed: %s", e)
             return None
 

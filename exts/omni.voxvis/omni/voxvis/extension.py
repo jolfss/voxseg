@@ -49,12 +49,22 @@ class MyExtension(omni.ext.IExt):
         for color_class in self.dict_color_to_label.keys():
             first_class_per_color_list.append(self.dict_color_to_label[color_class][0])
 
-        self.client.publish_class_names(first_class_per_color_list)
+        self.client.publish_class_names(first_class_per_color_list[1:])
 
     def request_computation(self):
+        self.send_classes()
         indices = self.voxels.indices()
-        classes = self.client.request_voxel_computation()
-        self.show_voxels(indices, classes)
+        voxels = self.client.request_voxel_computation()
+        
+        # Register a new voxel color per class.
+        class_colors = self.dict_color_to_label.keys()
+        for color in class_colors:
+            i_tag = "--invisible" in  self.dict_color_to_label[color][0] or " -i" in self.dict_color_to_label[color][0]
+            class_index = self.voxels.register_new_voxel_color(color, invisible=i_tag)
+            # NOTE: Typically you keep track of this class <-> index, we don't here because we randomly assign classes.
+
+
+        self.show_voxels(indices, voxels)
     #END CLIENT
     
     def build_visualization_tools(self):
@@ -69,7 +79,7 @@ class MyExtension(omni.ext.IExt):
                 Button("visualize occupancy")
                 Button("segment over labels", clicked_fn=self.request_computation)
                 Button("clear segments")
-                Button("hide/show voxels", clicked_fn=lambda : self.voxels.toggle())
+                Button("hide/show voxels", clicked_fn=self.voxels.toggle)
 
     def show_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):
         """Populates the world with all of the voxels specified, removing any that were there before.
