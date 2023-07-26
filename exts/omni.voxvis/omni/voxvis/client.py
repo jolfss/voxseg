@@ -13,6 +13,9 @@ from _DepthImageInfo import DepthImageInfo
 from _Classes import Classes
 from _VoxelGrid import VoxelGrid
 
+sys.path.append(f'{CATKIN_PATH}/devel/lib/python3/dist-packages/voxseg/srv')
+
+from _VoxelComputation import VoxelComputation
 
 #from voxseg.srv import VoxelComputation
 
