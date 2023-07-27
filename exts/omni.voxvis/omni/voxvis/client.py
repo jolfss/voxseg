@@ -1,13 +1,11 @@
-#!/home/pcgta/.local/share/ov/pkg/isaac_sim-2022.2.0/python.sh
 import rospy
 from std_msgs.msg import String, MultiArrayLayout, MultiArrayDimension
 from sensor_msgs.msg import Image
 
-CATKIN_PATH = '/home/pcgta/Documents/eth/voxseg'
+CATKIN_PATH = '/home/sean/don/will/voxseg' # TODO: Maybe have this exported and get from environment
 
 import sys
 sys.path.append(f'{CATKIN_PATH}/devel/lib/python3/dist-packages/voxseg/msg')
-
 
 from _DepthImageInfo import DepthImageInfo
 from _Classes import Classes
