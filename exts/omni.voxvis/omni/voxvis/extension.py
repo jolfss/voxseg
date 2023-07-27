@@ -67,7 +67,7 @@ class MyExtension(omni.ext.IExt):
         for color in class_colors:
             i_tag = "--invisible" in  self.dict_color_to_label[color][0] or " -i" in self.dict_color_to_label[color][0]
             class_index = self.voxels.register_new_voxel_color(color, invisible=i_tag)
-            # NOTE: Typically you keep track of this class <-> index, we don't here because we randomly assign classes.
+            # NOTE: Here's the index for the class
         
         self.show_voxels(indices, voxels)
     #END CLIENT

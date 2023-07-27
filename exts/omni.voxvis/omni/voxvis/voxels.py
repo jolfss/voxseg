@@ -215,12 +215,19 @@ class Voxels:
     def create_voxels(self, voxel_indices : Tensor, voxel_classes : Tensor):  
         """Creates the voxel for the i,j,k-th voxel in the stage, or does nothing if it already exists.
         Args:
-            voxel_indices (*size,3): Some size of N total vectors [i,j,k] denoting which voxels to create.
-            voxel_classes (N): The n-th class labels corresponds to the n-th ijk vector in the above tensor, flattened.
-        NOTE:
-            This method has a suboptimal number of conversions from Tensor -> Ve"""
-
-        # Satisfy buffer convention.
+            voxel_indices (*,3): Some size of N total vectors [i,j,k] denoting which voxels to create.
+            voxel_classes (*): Any tensor st. the n-th class (flattened) corresponds to the n-th ijk vector above.
+        Requires:
+            voxel_indices.numel() == voxel_classes.numel()"""
+        
+        # Check registration of classes
+        num_classes = len(self._voxel_prototypes)
+        max_id = voxel_classes.max()
+        if num_classes <= max_id:
+            print(F"[voxvis] Error: Cannot create voxel class {max_id}, only {num_classes} are registered. Aborting")
+            return
+        
+        # Assign instances to instancer
         voxel_indices = voxel_indices.view(-1,3)
         voxel_centers = Vt.Vec3fArray.FromNumpy(self.centers(voxel_indices).cpu().numpy())
         self._voxel_instancer.CreatePositionsAttr(voxel_centers)
