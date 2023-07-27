@@ -24,9 +24,10 @@ from .client import VoxSegClient
 PAD = 10
 TXTPAD = ' '*int(PAD/5)
 
-DEFAULT_WORLD_DIMS =   (40.,40.,10.)
-DEFAULT_GRID_DIMS  =   (40, 40, 10)
 DEFAULT_VOXEL_CENTER = (0., 0., 0. ) # FOR NOW DEFAULTS 
+DEFAULT_GRID_DIMS  =   (40, 40, 10  )
+DEFAULT_WORLD_DIMS =   (20.,20.,5.)
+
 
 class MyExtension(omni.ext.IExt):
     """The extension object for voxvis."""
