@@ -25,8 +25,8 @@ PAD = 10
 TXTPAD = ' '*int(PAD/5)
 
 DEFAULT_VOXEL_CENTER = (0., 0., 0. ) # FOR NOW DEFAULTS 
-DEFAULT_GRID_DIMS  =   (20, 20, 5  )
-DEFAULT_WORLD_DIMS =   (40.,40.,10.)
+DEFAULT_GRID_DIMS  =   (40, 40, 10  )
+DEFAULT_WORLD_DIMS =   (20.,20.,5.)
 
 
 class MyExtension(omni.ext.IExt):
@@ -49,12 +49,18 @@ class MyExtension(omni.ext.IExt):
         for color_class in self.dict_color_to_label.keys():
             first_class_per_color_list.append(self.dict_color_to_label[color_class][0])
 
+        self.client.publish_world_info(self.voxels.world_dims, self.voxels.grid_dims)
         self.client.publish_class_names(first_class_per_color_list[1:])
 
     def request_computation(self):
         self.send_classes()
-        indices = self.voxels.indices()
+        indices = self.voxels.indices(include_buffer=True)
         voxels = self.client.request_voxel_computation()
+
+        for i in range(6):
+            print(i)
+            print((voxels == i).sum())
+        torch.save(voxels, '/home/pcgta/Documents/eth/voxseg/src/voxseg/src/voxels.pt')    
         
         # Register a new voxel color per class.
         class_colors = self.dict_color_to_label.keys()
@@ -62,8 +68,7 @@ class MyExtension(omni.ext.IExt):
             i_tag = "--invisible" in  self.dict_color_to_label[color][0] or " -i" in self.dict_color_to_label[color][0]
             class_index = self.voxels.register_new_voxel_color(color, invisible=i_tag)
             # NOTE: Typically you keep track of this class <-> index, we don't here because we randomly assign classes.
-
-
+        
         self.show_voxels(indices, voxels)
     #END CLIENT
     
@@ -109,7 +114,7 @@ class MyExtension(omni.ext.IExt):
         self.show_voxels(all_voxel_indices, random_classes)
 
     def __DEMO__load_custom_classes(self):
-        custom_classes = {(0.8,0.5,0.2):["orange_color"],(0.2,0.9,0.2):["green_color","verde","multiple greens baby"],(0.9,0.1,0.1):["blank red --invisible"],(0.8,0.1,0.9):["purple_color"]}
+        custom_classes = {(0.8,0.5,0.2):["ground"],(0.2,0.9,0.2):["fire hydrant"],(0.9,0.1,0.1):["rocks"],(0.8,0.1,0.9):["heavy machinery"],(0,.9,0.9):["bricks"]}
         self.load_classes_from_dictionary(custom_classes)         
 
     def visualize_occupancy_fn(self):

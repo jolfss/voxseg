@@ -24,7 +24,7 @@ import numpy as np
 import torch
 from typing import List, Dict, Union
 
-from .config import CLIENT_NODE, CLASS_TOPIC, VOXEL_TOPIC, WORLD_DIM_TOPIC, VOXEL_REQUEST_SERVICE
+from .config import CLASS_TOPIC, WORLD_DIM_TOPIC, VOXEL_REQUEST_SERVICE
 from .utils import voxels_from_msg, convert_dict_to_dictionary_array
 
 class VoxSegClient:
@@ -37,7 +37,6 @@ class VoxSegClient:
 
         # Important: initialize the pubs before starting to publish
         self.class_pub = rospy.Publisher(CLASS_TOPIC, Classes, queue_size=10)
-        self.voxel_pub = rospy.Publisher(VOXEL_TOPIC, VoxelGrid, queue_size=10)
         self.dim_pub = rospy.Publisher(WORLD_DIM_TOPIC, WorldInfo, queue_size=10)
         
     def publish_world_info(self, world_dim, grid_dim):
@@ -127,8 +126,6 @@ class VoxSegClient:
             voxel_response = compute_data_service(min_pts_in_voxel)
             voxels = torch.as_tensor(voxel_response.data)
             print('VOXELS RECEIVED')
-            print(voxels.max())
-            print(voxels.min())
             return voxels
         except rospy.ServiceException as e:
             print('Service Call Failed')
