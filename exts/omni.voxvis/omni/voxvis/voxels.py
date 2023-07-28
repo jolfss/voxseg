@@ -60,7 +60,46 @@ def track(func):
 (-1 voxel)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"""
 
 class Voxels():
-    """TODO: Docs"""
+    """Leverages Omniverse's PointInstancer to display large amounts of voxels at once in the stage.
+
+    Params:
+        world_dims (float*float*float): The side lengths of the world (wx,wy,wz).
+            W (3,): Tensor equivalent of world_dims.
+        grid_dims (int*int*int): The number of voxels along each dimension (gx,gy,gz).
+            G (3,): Tensor equivalent of grid_dims.
+        voxel_center (float*float*float): The origin of the voxel space--dimensions extend W/2 in both directions.
+            C (3,): Tensor equivalent of voxel_center.
+        classes (str list): List of class names that are in use.
+        colors (Color list): List of all colors that are in use.
+        prototypes (Primpath list): List of all protovoxels (voxel prims used as prototypes) that are in use (by this).
+        num_classes (int): The number of classes currently in use.
+        instancer (pxr.UsdGeom.PointInstancer): The PointInstancer prim which contains and displays the voxels.
+
+    Methods:
+        capacity(self, include_buffer:bool=False) -> int: Number of voxels this contains, can optionally include shell.
+        centers(self, indices:(*,3)) -> Tensor (*,3): If indices contains ijk indices in its last dim (,3), i.e., every
+            row in [indices] is a vector [i,j,k], transforms [i,j,k] to the world space vector [wx,wy,wz] in its place.
+        get_labels(self, class_name : str) -> str list: All the labels corresponding to the given class name.
+        get_color(self, class_name : str) -> Color: The color of the class if class is a valid class.
+        get_prototype(self, class_name : str) -> Primpath: The primpath of the prim which the instancer duplicates.
+        indices(self, include_buffer:bool=False) -> Tensor (N,3): Tensor of all voxel indices and optionally the shell.
+        shell(self, include_buffer:bool=False) -> Tensor (*,3): The voxels on the boundary, optionally the buffer.
+    
+    State Methods:
+        add_label(self, class_name:str, label:str): Ensures that the given class has label as one of its labels.
+        scale_update(self): Update the scales of all protovoxels to match the current grid/world dims. TODO:Factor out?
+        create_class(self, class_name:str, class_color:Color): Creates class if it doesn't exist and the color is free.
+        remove_label(self, class_name:str, label:str): Ensures that this label is not a member of the class's labels.
+        delete_class(self, class_name:str): Deletes a class if it exists.
+        clear_classes(self, override_dict:Optional[Dict[str,Tuple[List[str],Tuple[float,float,float],Primpath]]]=None):
+            Clear all classes and optionally initialize to override_dict, otherwise takes self.default_dictionary.
+        redomain(self, world_dims:Optional[Tuple[float,float,float]]=None, grid_dims:Optional[Tuple[int,int,int]]=None, 
+            voxel_center:Optional[Tuple[float,float,float]]=None): Changes the domain of the voxel world.
+        toggle(self, force_visibility:Optional[bool]=None): Toggles the visibility, or optionally sets its status.
+        create_voxels(self, voxel_indices:Tensor, voxel_classes:Tensor): Creates the voxel for the ijk-th voxel in 
+            the stage, or does nothing if it already exists.
+
+        TODO: Figure out a good way to type Tensors by size--or not and leave it per method."""
 
     def __init__(self, 
                  world_dims : Tuple[float,float,float], 
@@ -149,6 +188,21 @@ class Voxels():
     #-------------#
     #   getters   #
     #-------------#
+    def capacity(self, include_buffer:bool=False) -> int:
+        "Number of total possible voxels in the voxel grid."
+        roving_product = 1
+        for dim in self.grid_dims:
+            roving_product *= dim + (0 if not include_buffer else 2)
+        return roving_product
+
+    def centers(self, indices:Tensor) -> Tensor:
+        """The world-coordinate centers of all voxels in [indices]. Does *NOT* need to be in the span of the voxel grid
+        Args:
+            indices (*,3): Any size with last component (,3) representing ijk indices for the voxel."""
+        if indices.type() != 'torch.LongTensor':
+            warn("Centers was passed non-long-typed indices, may not be aligned with true centers.")
+        return (1/(self.G) * (indices - (self.G-1)/2)) * self.W
+
     def get_labels(self, class_name : str) -> List[str]:
         return self._class_dict[class_name][0]
 
@@ -157,21 +211,6 @@ class Voxels():
     
     def get_prototype(self, class_name : str) -> Primpath:
         return self._class_dict[class_name][2]
-
-    def capacity(self, include_buffer:bool=False) -> int:
-        "Number of total possible voxels in the voxel grid."
-        roving_product = 1
-        for dim in self.grid_dims:
-            roving_product *= dim + (0 if not include_buffer else 2)
-        return roving_product
-
-    def centers(self, indices:Tensor):
-        """The world-coordinate centers of all voxels in [indices]. Does *NOT* need to be in the span of the voxel grid
-        Args:
-            indices (*,3): Any size with last component (,3) representing ijk indices for the voxel."""
-        if indices.type() != 'torch.LongTensor':
-            warn("Centers was passed non-long-typed indices, may not be aligned with true centers.")
-        return (1/(self.G) * (indices - (self.G-1)/2)) * self.W
 
     def indices(self, include_buffer:bool=False) -> Tensor:
         """TODO: Docs"""
