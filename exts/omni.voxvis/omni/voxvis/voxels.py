@@ -31,7 +31,7 @@ def track(func):
         print("#----------------------#")
         print("[voxseg.track] __AFTER__")
         self.print_state()
-        print("#━━━━━━━━━^^^^━━━━━━━━━#")
+        print("#━━━━━━━━━━━━━━━━━━━━━━#")
     return __track
 
 """Because OOD (out-of-domain) data is rather common, and sometimes discarding it outright is unfavorable, this class
