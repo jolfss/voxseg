@@ -31,7 +31,6 @@ DEFAULT_WORLD_DIMS =   (20.,20.,5.)
 
 class MyExtension(omni.ext.IExt):
     """The extension object for voxvis."""
-
     def __DEMO__randomize_over_classes(self):
         # Create set of all indices in the voxel grid then reshape to (N,3)
         all_voxel_indices = self.voxels.indices()
@@ -265,9 +264,11 @@ class MyExtension(omni.ext.IExt):
 
     def request_computation(self):
         self.send_classes()
+        self.client.publish_world_info(self.voxels.world_dims,self.voxels.grid_dims)
         indices = self.voxels.indices()
         voxels = self.client.request_voxel_computation()
-        self.voxels.create_voxels(indices, voxels)
+        mask = voxels > 0 # request computation has 0 as empty and [1...N] as labels, we want [0...N-1]
+        self.voxels.create_voxels(indices.view(-1,3)[mask], voxels.flatten()[mask]-1)
     #END CLIENT
     
     def build_visualization_tools(self):
