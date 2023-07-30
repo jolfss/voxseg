@@ -275,6 +275,9 @@ class Voxels():
 
     def create_class(self, class_name : str, class_color : Color):
         """Creates a new class if class_name is not in use, otherwise does nothing."""
+        if class_name.strip() == "":
+            warn("A class's name cannot be made of whitespace characters.")
+            return
 
         if class_name in self.classes or class_color in self.colors or class_name in self.labels:
             return

@@ -266,9 +266,9 @@ class MyExtension(omni.ext.IExt):
 
             with HStack():
                 widget = ColorWidget(width=30,style={"ColorWidget":
-                                    {"border_width": 2,"border_color": ui.color(0,0,0),"border_radius": 4,"margin": 2}})
+                                    {"border_width": 2.5,"border_color": ui.color(0.15,0.15,0.15),"border_radius": 0,"margin": 0}})
                 self.set_widget_color(widget,class_color)
-                class_label = Label(F"{TXTPAD}{class_name}", style={"font_size": 28.0, "color":ui.color(*class_color)})
+                class_label = Label(F"{TXTPAD}{class_name}", style={"font_size": 28.0, "color":ui.color(*class_color), "stroke":ui.color(0,0,0)})
 
             label_items = []
             for label in self.voxels.get_labels(class_name):
