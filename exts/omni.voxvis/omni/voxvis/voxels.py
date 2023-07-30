@@ -158,6 +158,13 @@ class Voxels():
         return list(self._class_dict.keys())
 
     @property
+    def labels(self):
+        labels = []
+        for class_name in self.classes:
+            labels += self.get_labels(class_name)
+        return labels
+    
+    @property
     def colors(self) -> List[Color]:
         colors = []
         for class_name in self.classes:
@@ -166,7 +173,6 @@ class Voxels():
     
     @property
     def prototypes(self) -> List[Primpath]:
-        "The list of "
         prototypes_list = []
         for class_name in self.classes:
             prototypes_list.append(self.get_prototype(class_name))
@@ -184,6 +190,9 @@ class Voxels():
             self._instancer.CreatePositionsAttr().Set(Vt.Vec3fArray.FromNumpy(0*self.G.cpu().numpy()))
             self._instancer.CreateProtoIndicesAttr().Set(Vt.IntArray.FromNumpy((0*self.G[0]).view(-1).cpu().numpy()))  
         return self._instancer
+    @instancer.deleter
+    def instancer(self):
+        self._instancer = None
 
     #-------------#
     #   getters   #
@@ -267,7 +276,7 @@ class Voxels():
     def create_class(self, class_name : str, class_color : Color):
         """Creates a new class if class_name is not in use, otherwise does nothing."""
 
-        if class_name in self.classes or class_color in self.colors:
+        if class_name in self.classes or class_color in self.colors or class_name in self.labels:
             return
 
         # create prototype voxel
@@ -292,16 +301,21 @@ class Voxels():
         if label in self.get_labels(class_name):
             self.get_labels(class_name).remove(label)
 
-    def delete_class(self, class_name : str):
-        """Deletes a class and its protovoxel if they exist."""
-        if class_name in self.classes:
-            _,_, protovoxel_primpath = self._class_dict.pop(class_name)
-            stage().RemovePrim(protovoxel_primpath)
-            self._instancer = None
+    def change_class_color(self, class_name : str, new_color : Color):
+        """Changes an existing class's color if that color is not in use."""
+        if class_name not in self.classes:
+            return
+        if new_color in self.colors:
+            return
+        stage().GetPrimAtPath(self.get_prototype(class_name)).GetProperty("primvars:displayColor").Set([new_color])
+        self._class_dict.update({class_name:(self.get_labels(class_name), new_color, self.get_prototype(class_name))})
 
     def clear_classes(self, override_dict:Optional[Dict[str,Tuple[List[str],Tuple[float,float,float],Primpath]]]=None):
         for class_name in self.classes:
-            self.delete_class(class_name)
+            _,_, protovoxel_primpath = self._class_dict.pop(class_name)
+            self.instancer.GetPrototypesRel().RemoveTarget(protovoxel_primpath)
+            stage().RemovePrim(protovoxel_primpath)
+            del self.instancer
         self._class_dict = {} if override_dict is None else override_dict
         
         self.instancer 

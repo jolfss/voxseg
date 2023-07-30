@@ -1,5 +1,5 @@
 # general python
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 import numpy as np
 import torch
 from torch import Tensor
@@ -12,6 +12,7 @@ import omni.ui as ui
 from omni.ui import \
     Window, CollapsableFrame, ScrollingFrame, VStack, HStack \
     , Label, StringField, ColorWidget, Button \
+    , AbstractItemModel, AbstractValueModel \
     , MultiFloatDragField, MultiIntDragField\
     , Fraction
 
@@ -176,59 +177,61 @@ class MyExtension(omni.ext.IExt):
     """
     The fundamental idea is that each color represents a class, so instead of making structure which groups labels
     under a particular class, simply group all labels by the color they were defined with.
-
-    There are some tags which the user can use, these must be specified with the first label in the class.
-    -i --invisible, makes the voxel invisible by default (sets the prototype voxel prim to invisible)
     """      
 
-    def get_current_label_and_color(self) -> Tuple[Tuple[float,float,float],str]:
+    def get_current_label(self) -> Tuple[Tuple[float,float,float],str]:
         """reads in the label and color in the ui and returns them"""
         user_input = self.string_field_class_label.model.as_string.strip()
-        color_model  = self.color_widget_class_color.model
-        r,g,b=[(color_model.get_item_value_model(child)).as_float for child in color_model.get_item_children()[:3]]
-        return user_input, (r,g,b)
+        return user_input
+    
+    def get_random_color_not_in_use(self, f: Callable[[float],float]=lambda x:x):
+        r,g,b = np.random.rand(), np.random.rand(), np.random.rand()
+        r,g,b = f(r), f(g), f(b)
+        while (r,g,b) in self.voxels.colors:
+            r,g,b = f(np.random.rand()), f(np.random.rand()), f(np.random.rand())
+        return r,g,b
 
-    def randomize_color_widget(self):
-        # change the color-picker widget to match the generated color
-        widget = self.color_widget_class_color.model
-        rmodel,gmodel,bmodel=[(widget.get_item_value_model(child)) for child in widget.get_item_children()[:3]]
-        rmodel.set_value(np.random.rand())
-        gmodel.set_value(np.random.rand())
-        bmodel.set_value(np.random.rand())    
+    def set_widget_color(self, widget : ColorWidget, color:Tuple[float,float,float]):
+        rmodel,gmodel,bmodel=[(widget.model.get_item_value_model(child)) for child in widget.model.get_item_children()[:3]]
+        r,g,b = color
+        rmodel.set_value(r)
+        gmodel.set_value(g)
+        bmodel.set_value(b)
+
+    def clear_string_field_input(self):
+        self.string_field_class_label.model.set_value("")
 
     def create_class(self, color_override : Optional[Tuple[float,float,float]]=None):
-        """TODO: Docs"""
-        label, (r,g,b) = self.get_current_label_and_color()
+        label, (r,g,b) = self.get_current_label(), self.get_random_color_not_in_use()
         self.voxels.create_class(label, (r,g,b) if color_override is None else color_override)
-        self.randomize_color_widget()
         self.update_class_vstack()    
+        self.clear_string_field_input()
 
     def add_label(self, label_override : Optional[str]=None):
-        """TODO: Docs"""
-        label, _ = self.get_current_label_and_color()
+        label = self.get_current_label()
         self.voxels.add_label(self.voxels.classes[-1], label if label_override is None else label_override)
         self.update_class_vstack()
+        self.clear_string_field_input()
 
     def build_class_label_editor(self):
         """Creates the first widget group meant for defining class labels."""
         with CollapsableFrame("Class Label Editor"):
-            STARTING_COLOR = 0.5,0.5,0.5
             with VStack(height=0):
-                with HStack():
+                with ui.HStack():
                     self.button_create_class = Button("Create Class", clicked_fn=self.create_class)
-                    self.color_widget_class_color = ColorWidget(*STARTING_COLOR)
-                with HStack():
                     self.button_add_label = Button("Assign New Sublabel", clicked_fn=self.add_label)
                 self.string_field_class_label = StringField()
 
                 
     #----------------------------------------------------------------#
-    #   this block lets the user see what labels have been defined   #
+    #   this block lets the user see and modify classes and labels   #
     #----------------------------------------------------------------#
     """
     Shows the user all of the current classes (and their labels) that they have defined so far, in order.
     The first label in each class is slightly bigger to denote that it is the principle label.
     """
+
+    class_to_rgb_widgets : Dict[str,ColorWidget]= {}
 
     def build_class_vstack(self):
         """Contains all of the registered labels, has a button to clear them."""
@@ -241,17 +244,52 @@ class MyExtension(omni.ext.IExt):
         with CollapsableFrame("View Labels"):
             with VStack():
                 self.class_vstack = VStack(height=0, spacing=PAD)
-                Button("Clear Labels", clicked_fn=clear_labels_fn)
+                Button("Clear Labels", clicked_fn=clear_labels_fn)        
 
     def update_class_vstack(self):
         """Clears and then rebuilds the vstack with all colors (classes) and their labels."""
+        def create_class_dynamic_label(class_name, class_color):
+            def change_class_color(class_name, class_label:Label, labels_labels:List[Label], rnew=None,bnew=None,gnew=None):
+                r,g,b = self.voxels.get_color(class_name)
+                r,g,b = r if rnew is None else rnew, g if gnew is None else gnew, b if bnew is None else bnew
+                style = class_label.style
+                style.update({"color":ui.color(r,g,b)})
+                class_label.set_style(style)
+                for label in labels_labels:
+                    style = label.style
+                    style.update({"color":ui.color(r,g,b)})
+                    label.set_style(style)
+                self.voxels.change_class_color(class_name, (r,g,b))
+                # NOTE: Incantation, for some reason the colors stop updating until the stage is somehow modified.
+                self.voxels.toggle()
+                self.voxels.toggle()
+
+            with HStack():
+                widget = ColorWidget(width=30,style={"ColorWidget":
+                                    {"border_width": 2,"border_color": ui.color(0,0,0),"border_radius": 4,"margin": 2}})
+                self.set_widget_color(widget,class_color)
+                class_label = Label(F"{TXTPAD}{class_name}", style={"font_size": 28.0, "color":ui.color(*class_color)})
+
+            label_items = []
+            for label in self.voxels.get_labels(class_name):
+                label_items.append(Label(F"{TXTPAD}{label}", style={"font_size": 20.0, "color":ui.color(*class_color)}))
+
+            rmodel, gmodel, bmodel, __ = [widget.model.get_item_value_model(item_model) \
+                                          for item_model in widget.model.get_item_children()]  
+            # NOTE: These conventions are, frankly, totally lost to me. This particular incantation works (G,B column swap)
+            rmodel.add_value_changed_fn(lambda avm : change_class_color(class_name, class_label, label_items, avm.as_float, bmodel.as_float, gmodel.as_float))
+            gmodel.add_value_changed_fn(lambda avm : change_class_color(class_name, class_label, label_items, rmodel.as_float, bmodel.as_float, avm.as_float))
+            bmodel.add_value_changed_fn(lambda avm : change_class_color(class_name, class_label, label_items, rmodel.as_float, avm.as_float, gmodel.as_float))            
+
         self.class_vstack.clear()
         with self.class_vstack:
+            if len(self.voxels.classes) == 0:
+                # if 0 we still need a child present to force the vstack to resize
+                Label(F"{TXTPAD}<no classes added>", style={"font_size": 28.0, "color":ui.color(0.675,0.675,0.675)})
+                return
             for class_name in self.voxels.classes:
                 class_color = self.voxels.get_color(class_name)
-                Label(class_name, style={"font_size": 28.0, "color":ui.color(*class_color)})
-                for label in self.voxels.get_labels(class_name):
-                    Label(label, style={"font_size": 20.0, "color":ui.color(*class_color)})
+                create_class_dynamic_label(class_name, class_color)
 
     #---------------------------------------------------------------------------#
     #   this block has buttons/functions that make voxels appear in the stage   #
