@@ -313,12 +313,5 @@ class MyExtension(omni.ext.IExt):
         """TODO: Docs"""
         with CollapsableFrame("Voxel Visualization"):
             with VStack(height=0,spacing=PAD):
-                with VStack():
-                    Label(F"{TXTPAD}Total Occupied Voxels: <UNIMPLEMENTED>")
-                    Label(F"{TXTPAD}Number of Photos: <UNIMPLEMENTED>")
-                Button("--DEBUG load classes from dictionary", clicked_fn=self.__DEMO__load_dictionary)
-                Button("--DEBUG randomize over current labels", clicked_fn=self.__DEMO__randomize_over_classes)
-                #Button("visualize occupancy")
                 Button("segment over labels", clicked_fn=self.request_computation)
-                #Button("clear segments")
                 Button("hide/show voxels", clicked_fn=self.voxels.toggle)
