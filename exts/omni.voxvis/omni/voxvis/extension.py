@@ -156,7 +156,8 @@ class MyExtension(omni.ext.IExt):
 
         def on_end_preview(dummy=None):
             self.preview_voxels.toggle(False)
-            self.voxels.redomain(*self.get_domain_values())
+            self.voxels.redomain(*self.get_domain_values()) 
+            self.client.publish_world_info(self.voxels.world_dims,self.voxels.grid_dims)
             #self.voxels.toggle(True) NOTE: Aesthetic to have it True, but no longer accurate so just disable.
 
         (wx,wy,wz), (gx,gy,gz), (cx,cy,cz) = self.get_domain_value_models()
@@ -302,7 +303,6 @@ class MyExtension(omni.ext.IExt):
 
     def request_computation(self):
         self.send_classes()
-        self.client.publish_world_info(self.voxels.world_dims,self.voxels.grid_dims)
         indices = self.voxels.indices()
         voxels = self.client.request_voxel_computation()
         mask = voxels > 0 # request computation has 0 as empty and [1...N] as labels, we want [0...N-1]

@@ -4,6 +4,8 @@ _*/
 .DS_Store
 **/.vscode/ipch
 
+.vscode/
+
 # byte-compiled python files
 *.py[cod]
 
