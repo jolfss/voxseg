@@ -303,10 +303,11 @@ class MyExtension(omni.ext.IExt):
 
     def request_computation(self):
         self.send_classes()
-        indices = self.voxels.indices()
+        indices = self.voxels.indices(include_buffer=True)
         voxels = self.client.request_voxel_computation()
         mask = voxels > 0 # request computation has 0 as empty and [1...N] as labels, we want [0...N-1]
         self.voxels.create_voxels(indices.view(-1,3)[mask], voxels.flatten()[mask]-1)
+        
     #END CLIENT
     
     def build_visualization_tools(self):

@@ -2,7 +2,7 @@ import rospy
 from std_msgs.msg import String, MultiArrayLayout, MultiArrayDimension
 from sensor_msgs.msg import Image
 
-CATKIN_PATH = '/home/sean/don/will/voxseg' # TODO: Maybe have this exported and get from environment
+CATKIN_PATH = '/home/pcgta/Documents/eth/voxseg' # TODO: Maybe have this exported and get from environment
 
 import sys
 sys.path.append(f'{CATKIN_PATH}/devel/lib/python3/dist-packages/voxseg/msg')
