@@ -66,10 +66,13 @@ class MyExtension(omni.ext.IExt):
         """TODO: Describe the order of initialization sensitivities. (what depends on what)"""
         print("[omni.voxvis] voxvis on_startup")
         self.voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS, directory="/World/voxvis/voxels")
+        
         self.preview_voxels = Voxels(DEFAULT_WORLD_DIMS, DEFAULT_GRID_DIMS, directory="/World/voxvis/preview")
 
         self.window = self.build_extension()   
-        self.client = VoxSegClient()                
+        self.client = VoxSegClient()               
+
+        self.client.publish_world_info(self.voxels.world_dims,self.voxels.grid_dims) 
 
     def on_shutdown(self):
         """TODO: """
